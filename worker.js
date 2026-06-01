@@ -401,14 +401,32 @@ export default {
           }
 
           var transcript = body.transcript || '';
-          if (!transcript && renderUrl) {
-            try {
-              var r = await fetch(renderUrl + '/api/transcript?videoUrl=' + encodeURIComponent(videoUrl));
-              if (r.ok) {
-                var td = await r.json();
-                transcript = td.transcript || td.text || '';
-              }
-            } catch (e) {}
+          // Try fetching transcript from multiple sources
+          async function fetchTranscript(vUrl) {
+            // Source 1: Render backend (if configured)
+            if (renderUrl) {
+              try {
+                var r = await fetch(renderUrl + '/api/transcript?videoUrl=' + encodeURIComponent(vUrl));
+                if (r.ok) {
+                  var td = await r.json();
+                  if (td.transcript || td.text) return td.transcript || td.text;
+                }
+              } catch (e) {}
+            }
+            // Source 2: Free YouTube transcript API
+            var vidMatch = vUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+            if (vidMatch) {
+              try {
+                var ytRes = await fetch('https://youtubetranscript.com/?v=' + vidMatch[1] + '&format=text');
+                if (ytRes.ok) {
+                  return await ytRes.text();
+                }
+              } catch (e) {}
+            }
+            return '';
+          }
+          if (!transcript) {
+            transcript = await fetchTranscript(videoUrl);
           }
 
           if (transcript) {

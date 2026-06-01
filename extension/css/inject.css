@@ -1,0 +1,490 @@
+/* ============================================
+   KlikClip — Injected Styles for YouTube
+   ============================================ */
+
+/* Floating summarize button */
+#KlikClip-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  margin: 12px 0;
+  background: linear-gradient(135deg, #6C5CE7, #a855f7);
+  color: #fff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+  z-index: 9999;
+  letter-spacing: -0.01em;
+}
+
+#KlikClip-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(108, 92, 231, 0.45);
+}
+
+#KlikClip-btn .vl-icon {
+  width: 20px;
+  height: 20px;
+}
+
+#KlikClip-btn .vl-free-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Summary panel overlay */
+#KlikClip-panel {
+  position: fixed;
+  top: 0;
+  right: -520px;
+  width: 500px;
+  height: 100vh;
+  background: #0f0f0f;
+  border-left: 1px solid #222;
+  z-index: 100000;
+  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #e5e5e5;
+  box-shadow: -10px 0 40px rgba(0,0,0,0.5);
+}
+
+#KlikClip-panel.open {
+  right: 0;
+}
+
+#KlikClip-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+#KlikClip-panel::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+/* Panel header */
+.vl-panel-header {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, #0f0f0f 80%, transparent);
+  padding: 20px 24px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.vl-panel-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.vl-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.vl-close-btn:hover {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #555;
+}
+
+/* Panel content */
+.vl-panel-body {
+  padding: 20px 24px;
+}
+
+/* Loading state */
+.vl-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 20px;
+}
+
+.vl-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #222;
+  border-top-color: #6C5CE7;
+  border-radius: 50%;
+  animation: vl-spin 0.8s linear infinite;
+}
+
+@keyframes vl-spin {
+  to { transform: rotate(360deg); }
+}
+
+.vl-loading p {
+  color: #888;
+  font-size: 14px;
+}
+
+/* Summary sections */
+.vl-section {
+  margin-bottom: 24px;
+}
+
+.vl-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6C5CE7;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Key points */
+.vl-keypoints {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.vl-keypoints li {
+  position: relative;
+  padding: 10px 12px 10px 28px;
+  margin-bottom: 6px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d4d4d4;
+  border: 1px solid #222;
+  transition: all 0.2s;
+}
+
+.vl-keypoints li:hover {
+  background: #222;
+  border-color: #333;
+}
+
+.vl-keypoints li::before {
+  content: '▸';
+  position: absolute;
+  left: 12px;
+  color: #6C5CE7;
+  font-weight: bold;
+}
+
+/* Timestamp links */
+.vl-timestamp-link {
+  color: #6C5CE7;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
+  padding: 2px 6px;
+  background: rgba(108, 92, 231, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.vl-timestamp-link:hover {
+  background: rgba(108, 92, 231, 0.3);
+}
+
+/* Keywords */
+.vl-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vl-keyword {
+  padding: 4px 10px;
+  background: rgba(108, 92, 231, 0.12);
+  border: 1px solid rgba(108, 92, 231, 0.25);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a78bfa;
+  transition: all 0.2s;
+}
+
+.vl-keyword:hover {
+  background: rgba(108, 92, 231, 0.25);
+}
+
+/* Storyline */
+.vl-storyline {
+  padding: 16px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  border: 1px solid #222;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #c4c4c4;
+}
+
+.vl-storyline-chapter {
+  margin-bottom: 16px;
+  padding-left: 16px;
+  border-left: 2px solid #6C5CE7;
+}
+
+.vl-storyline-chapter:last-child {
+  margin-bottom: 0;
+}
+
+.vl-chapter-time {
+  font-size: 11px;
+  color: #6C5CE7;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.vl-chapter-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.vl-chapter-desc {
+  font-size: 13px;
+  color: #999;
+  line-height: 1.5;
+}
+
+/* Q&A section */
+.vl-qa-input-wrap {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.vl-qa-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.vl-qa-input:focus {
+  border-color: #6C5CE7;
+}
+
+.vl-qa-input::placeholder {
+  color: #555;
+}
+
+.vl-qa-btn {
+  padding: 10px 16px;
+  background: #6C5CE7;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.vl-qa-btn:hover {
+  background: #5a4bd1;
+}
+
+.vl-qa-answer {
+  padding: 12px 16px;
+  background: #1a1a1a;
+  border-radius: 10px;
+  border: 1px solid #222;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #c4c4c4;
+  margin-top: 8px;
+}
+
+.vl-qa-answer .vl-qa-source {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #6C5CE7;
+}
+
+/* Export buttons */
+.vl-export-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vl-export-btn {
+  padding: 8px 14px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #999;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.vl-export-btn:hover {
+  background: #222;
+  color: #fff;
+  border-color: #6C5CE7;
+}
+
+/* Free usage counter */
+.vl-usage-bar {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(108,92,231,0.1), rgba(168,85,247,0.1));
+  border: 1px solid rgba(108,92,231,0.2);
+  border-radius: 10px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vl-usage-text {
+  font-size: 13px;
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+.vl-usage-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.vl-usage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6C5CE7;
+}
+
+.vl-usage-dot.used {
+  background: #333;
+}
+
+/* Upgrade CTA */
+.vl-upgrade-cta {
+  padding: 16px;
+  background: linear-gradient(135deg, #6C5CE7, #a855f7);
+  border-radius: 12px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.vl-upgrade-cta p {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 4px;
+}
+
+.vl-upgrade-cta span {
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+.vl-upgrade-btn {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 10px 24px;
+  background: #fff;
+  color: #6C5CE7;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.vl-upgrade-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Error state */
+.vl-error {
+  padding: 20px;
+  text-align: center;
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.vl-error button {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* Overlay backdrop */
+#KlikClip-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.4);
+  z-index: 99999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+#KlikClip-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  #KlikClip-panel {
+    width: 100%;
+    right: -100%;
+  }
+}

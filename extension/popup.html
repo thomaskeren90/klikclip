@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KlikClip</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f0f0f;
+      color: #e5e5e5;
+    }
+
+    .popup-header {
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .popup-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .popup-logo svg { width: 28px; height: 28px; }
+    .popup-logo h1 { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+
+    .popup-tagline {
+      font-size: 13px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .popup-body { padding: 20px; }
+
+    .usage-display {
+      background: linear-gradient(135deg, rgba(108,92,231,0.1), rgba(168,85,247,0.1));
+      border: 1px solid rgba(108,92,231,0.2);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .usage-number {
+      font-size: 36px;
+      font-weight: 800;
+      color: #6C5CE7;
+      letter-spacing: -0.03em;
+    }
+
+    .usage-label {
+      font-size: 13px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .usage-reset {
+      font-size: 11px;
+      color: #555;
+      margin-top: 8px;
+    }
+
+    .popup-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    .popup-cta {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #6C5CE7, #a855f7);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.2s;
+      margin-bottom: 8px;
+    }
+
+    .popup-cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+    }
+
+    .popup-cta.secondary {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #999;
+      font-weight: 500;
+    }
+
+    .popup-cta.secondary:hover {
+      background: #222;
+      color: #fff;
+    }
+
+    .popup-footer {
+      padding: 12px 20px;
+      text-align: center;
+      border-top: 1px solid #1a1a1a;
+      font-size: 11px;
+      color: #444;
+    }
+
+    .popup-footer a {
+      color: #6C5CE7;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="popup-header">
+    <div class="popup-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#6C5CE7" stroke-width="2.5">
+        <circle cx="12" cy="12" r="10"/>
+        <polygon points="10 8 16 12 10 16 10 8" fill="#6C5CE7" stroke="none"/>
+      </svg>
+      <h1>KlikClip</h1>
+    </div>
+    <p class="popup-tagline">Save hours. Understand any video instantly.</p>
+  </div>
+
+  <div class="popup-body">
+    <div class="usage-display">
+      <div class="usage-number" id="remaining">5</div>
+      <div class="usage-label">free summaries left today</div>
+      <div class="usage-reset">Resets at midnight</div>
+    </div>
+
+    <div class="popup-stats">
+      <div class="stat-card">
+        <div class="stat-value" id="total-saved">0</div>
+        <div class="stat-label">Videos Summarized</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="time-saved">0h</div>
+        <div class="stat-label">Time Saved</div>
+      </div>
+    </div>
+
+    <a href="https://klikclip.ai/upgrade" target="_blank" class="popup-cta">
+      ⚡ Get Unlimited — $4.99/mo
+    </a>
+
+    <a href="https://klikclip.ai" target="_blank" class="popup-cta secondary">
+      Visit KlikClip
+    </a>
+  </div>
+
+  <div class="popup-footer">
+    <a href="https://klikclip.ai/privacy">Privacy</a> ·
+    <a href="https://klikclip.ai/terms">Terms</a> ·
+    Made with 💜
+  </div>
+
+  <script>
+    // Load usage stats
+    async function loadStats() {
+      try {
+        const stored = await chrome.storage.local.get(['vl_usage', 'vl_usage_date', 'vl_total_saved']);
+        const today = new Date().toDateString();
+
+        let remaining = 5;
+        if (stored.vl_usage_date === today) {
+          remaining = Math.max(0, 5 - (stored.vl_usage || 0));
+        }
+
+        document.getElementById('remaining').textContent = remaining;
+        document.getElementById('total-saved').textContent = stored.vl_total_saved || 0;
+        document.getElementById('time-saved').textContent = `${((stored.vl_total_saved || 0) * 0.5).toFixed(1)}h`;
+
+      } catch (e) {
+        console.log('Stats load error:', e);
+      }
+    }
+
+    loadStats();
+  </script>
+</body>
+</html>

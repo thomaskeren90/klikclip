@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>KlikClip — AI Viral Clip Factory</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css" rel="stylesheet"/>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif}
+:root{--P:#00AA13;--PD:#008A0E;--PL:#E6F7E8;--BG:#F5F7FA;--W:#fff;--T:#1F2937;--TM:#6B7280;--TL:#9CA3AF;--B:#E5E7EB;--R:#EF4444}
+body{background:var(--BG);color:var(--T);min-height:100vh;display:flex}
+.sidebar{width:240px;background:var(--W);border-right:1px solid var(--B);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50}
+.side-logo{display:flex;align-items:center;gap:8px;padding:20px 20px 16px;font-size:18px;font-weight:800;border-bottom:1px solid var(--B)}
+.side-logo .icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(145deg,#00C416,#00690C);display:flex;align-items:center;justify-content:center}
+.side-user{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--B);cursor:pointer}
+.side-avatar{width:32px;height:32px;border-radius:8px;background:var(--P);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.side-nav{flex:1;padding:8px;overflow-y:auto}
+.side-item{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:13px;font-weight:500;color:var(--T);cursor:pointer;border-radius:10px;transition:.15s;margin-bottom:2px}
+.side-item:hover{background:var(--PL)}
+.side-item.active{background:var(--PL);color:var(--P);font-weight:700;border-left:3px solid var(--P);border-radius:10px 0 0 10px;margin-left:-8px;padding-left:17px}
+.side-item i{font-size:18px;width:20px;text-align:center}
+.side-credits{padding:12px 16px;border-top:1px solid var(--B);font-size:12px}
+.side-credits .bar{height:6px;background:var(--B);border-radius:100px;margin-top:6px;overflow:hidden}
+.side-credits .bar-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,#00C416,#00AA13);width:0%;transition:width .3s}
+.main{margin-left:240px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+.top-bar{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;background:var(--W);border-bottom:1px solid var(--B)}
+.top-bar h2{font-size:18px;font-weight:700}
+.credit-badge{height:30px;padding:0 10px;border-radius:100px;background:var(--PL);display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--P)}
+.page{display:none;padding:32px;max-width:900px;width:100%;margin:0 auto}
+.page.active{display:block}
+.hero{background:linear-gradient(160deg,#F0FFF2,#fff);border-radius:20px;padding:32px;border:1px solid var(--B);margin-bottom:24px}
+.hero h1{font-size:28px;font-weight:800;margin-bottom:6px}
+.hero p{font-size:15px;color:var(--TM);margin-bottom:24px}
+.input-row{display:flex;align-items:center;gap:8px;background:var(--W);border:2px solid var(--B);border-radius:12px;padding:0 16px;height:52px;max-width:600px;transition:.2s}
+.input-row:focus-within{border-color:var(--P)}
+.input-row input{flex:1;border:none;outline:none;font-size:14px;color:var(--T);background:transparent}
+.selects{display:flex;gap:12px;margin-bottom:20px;max-width:400px}
+.selects select{flex:1;height:44px;border:2px solid var(--B);border-radius:10px;padding:0 12px;font-size:13px;color:var(--T);background:var(--W)}
+.btn-p{height:52px;padding:0 40px;border-radius:100px;border:none;background:linear-gradient(180deg,#00C416,#00AA13);color:#fff;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(0,170,19,0.35);display:inline-flex;align-items:center;gap:8px}
+.btn-p:hover{transform:translateY(-1px)}
+.btn-p:disabled{opacity:.7;cursor:not-allowed}
+.toggle-chip{height:32px;padding:0 12px;border-radius:100px;border:2px solid var(--B);background:var(--W);font-size:11px;font-weight:600;color:var(--TM);cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.15s}
+.toggle-chip.active{border-color:var(--P);background:var(--PL);color:var(--P)}
+.toggle-chip:hover{border-color:#aaa}
+.lang-btn{height:30px;padding:0 10px;border-radius:100px;border:1.5px solid var(--B);background:var(--W);font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px}
+.pcard{background:var(--BG);border-radius:14px;padding:20px;margin:20px 0;text-align:center}
+.pbar{height:10px;background:var(--B);border-radius:100px;overflow:hidden;margin:10px auto;max-width:400px}
+.pfill{height:100%;border-radius:100px;background:linear-gradient(90deg,#00C416,#00AA13);width:0%;transition:width .3s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:20px}
+.card{background:var(--W);border:1px solid var(--B);border-radius:16px;overflow:hidden;transition:.2s;display:flex;flex-direction:column}
+.card:hover{box-shadow:0 8px 24px rgba(0,0,0,0.12)}
+.thumb{height:150px;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
+.cicon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+.cdur{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.6);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px}
+.cscore{position:absolute;top:10px;right:10px;border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700}
+.cinfo{padding:12px 14px 14px;flex:1;display:flex;flex-direction:column}
+.ctitle{font-size:13px;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.chook{font-size:11px;color:var(--TM);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cinfo .btn-d{width:100%;height:36px;border-radius:100px;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;margin-top:auto;transition:.15s}
+.cinfo .btn-d:hover{opacity:.9}
+.cinfo .btn-d:disabled{opacity:.5;cursor:not-allowed}
+.msg{border-radius:14px;padding:14px 18px;margin:12px 0;font-size:13px}
+.msg-err{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}
+.msg-ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal-inner{background:var(--W);border-radius:20px;padding:32px;width:100%;max-width:420px;position:relative}
+.modal h2{font-size:20px;font-weight:700;margin-bottom:20px}
+.modal .close{position:absolute;top:16px;right:16px;border:none;background:none;font-size:20px;cursor:pointer;color:var(--TM)}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--TM);margin-bottom:4px}
+.form-group input{width:100%;height:44px;border:2px solid var(--B);border-radius:10px;padding:0 14px;font-size:14px;outline:none;transition:.15s}
+.form-group input:focus{border-color:var(--P)}
+.form-group .error{color:var(--R);font-size:11px;margin-top:2px}
+.modal .btn-p{width:100%;justify-content:center;margin-top:8px}
+.modal .switch{text-align:center;margin-top:12px;font-size:13px;color:var(--TM)}
+.modal .switch a{color:var(--P);cursor:pointer;font-weight:600}
+.price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.price-card{background:var(--W);border:2px solid var(--B);border-radius:16px;padding:20px;text-align:center;cursor:pointer;transition:.2s}
+.price-card:hover{border-color:var(--P)}
+.price-card.pop{border-color:var(--P);box-shadow:0 4px 16px rgba(0,170,19,0.15);position:relative}
+.price-card .sub{display:inline-block;font-size:10px;font-weight:700;color:var(--P);background:var(--PL);padding:2px 8px;border-radius:100px;margin-bottom:6px}
+.price-name{font-size:16px;font-weight:700}
+.price-amt{font-size:28px;font-weight:800;margin:8px 0}
+.price-feat{font-size:12px;color:var(--TM)}
+.price-btn{margin-top:12px;height:36px;padding:0 20px;border-radius:100px;cursor:pointer;font-weight:600;border:2px solid var(--B);background:var(--W);transition:.15s}
+.price-btn.primary{border:none;background:linear-gradient(180deg,#00C416,#00AA13);color:#fff;font-weight:700}
+@media(max-width:768px){
+  .sidebar{display:none}.main{margin-left:0}.page{padding:16px}.hero{padding:20px}.hero h1{font-size:22px}.grid{grid-template-columns:1fr 1fr}.price-grid{grid-template-columns:1fr}.top-bar{padding:0 16px}
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="side-logo"><div class="icon"><i class="ti ti-video" style="color:#fff;font-size:16px"></i></div>KlikClip</div>
+  <div class="side-user" id="side-user" onclick="showAuth()"><div class="side-avatar" id="side-avatar">?</div><div><div class="side-uname" id="side-name">Not logged in</div><div style="font-size:11px;color:var(--TM)" id="side-plan">Free plan</div></div></div>
+  <div class="side-nav">
+    <div class="side-item active" onclick="go('home')"><i class="ti ti-home"></i>Home</div>
+    <div class="side-item" onclick="go('stats')"><i class="ti ti-chart-bar"></i>Stats</div>
+    <div class="side-item" onclick="go('history')"><i class="ti ti-history"></i>History</div>
+    <div class="side-item" onclick="go('pricing')"><i class="ti ti-coin"></i>Pricing</div>
+    <div class="side-item" onclick="go('settings')"><i class="ti ti-settings"></i>Settings</div>
+  </div>
+  <div class="side-credits">
+    <div style="display:flex;justify-content:space-between"><span>Credits</span><span style="color:var(--P);font-weight:700"><span id="credits-used">0</span> / <span id="credits-limit">3</span></span></div>
+    <div class="bar"><div class="bar-fill" id="credits-bar"></div></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="top-bar">
+    <h2 id="ptitle">Home</h2>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="lang-btn" onclick="togLang()"><i class="ti ti-world" style="font-size:13px"></i> <span id="llabel">EN</span></button>
+      <button class="btn-p" style="height:34px;padding:0 16px;font-size:12px;box-shadow:none" onclick="showAuth()" id="login-btn">Login</button>
+      <div class="credit-badge"><i class="ti ti-bolt" style="font-size:12px"></i> <span id="badge-credits">0</span></div>
+    </div>
+  </div>
+
+<div id="page-home" class="page active">
+  <div class="hero">
+    <h1 id="hero-title">Generate Viral Clips in Seconds</h1>
+    <p id="hero-sub">Paste a YouTube link — AI finds the best moments and delivers TikTok-ready clips</p>
+    <div class="input-row"><i class="ti ti-link" style="color:var(--TL);font-size:18px"></i><input type="text" id="url-input" placeholder="https://youtube.com/watch?v=..."/></div>
+    <div style="display:flex;align-items:center;gap:12px;margin:12px 0 8px"><div style="flex:1;height:1px;background:var(--B)"></div><span style="font-size:11px;color:var(--TL)">or upload a video</span><div style="flex:1;height:1px;background:var(--B)"></div></div>
+    <input type="file" id="upload-input" accept="video/*" style="display:none"/>
+    <div id="upload-zone" style="border:2px dashed var(--B);border-radius:12px;padding:20px;text-align:center;cursor:pointer;margin-bottom:12px;max-width:600px;transition:.2s" onclick="document.getElementById('upload-input').click()">
+      <i class="ti ti-upload" style="font-size:28px;color:var(--TL);margin-bottom:6px;display:block"></i>
+      <span style="font-size:13px;color:var(--TM)">Click to select video or drag & drop</span>
+    </div>
+    <div class="selects">
+      <select id="style-sel"><option value="auto">Auto Detect</option><option value="podcast">Podcast</option><option value="gaming">Gaming</option><option value="talking">Talking Head</option></select>
+      <select id="cnt-sel"><option value="5">5 clips</option><option value="10" selected>10 clips</option><option value="15">15 clips</option></select>
+    </div>
+
+    <!-- Feature toggles -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--TM);margin-bottom:8px">Enhancements:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="toggle-chip active" data-key="captions" onclick="togChip(this)"><i class="ti ti-subtitle" style="font-size:12px"></i> AI Captions</button>
+        <button class="toggle-chip" data-key="reframe" onclick="togChip(this)"><i class="ti ti-crop" style="font-size:12px"></i> AI Reframe</button>
+        <button class="toggle-chip" data-key="enhance" onclick="togChip(this)"><i class="ti ti-volume" style="font-size:12px"></i> Enhance Speech</button>
+        <button class="toggle-chip" data-key="hook" onclick="togChip(this)"><i class="ti ti-sparkles" style="font-size:12px"></i> AI Hook</button>
+      </div>
+    </div>
+
+    <button class="btn-p" id="gen-btn" onclick="gen()"><i class="ti ti-bolt" style="font-size:16px"></i> 🔥 Generate Clips</button>
+    <div id="msg-area"></div>
+  </div>
+
+  <div id="prog-area" style="display:none">
+    <div class="pcard"><i class="ti ti-player-play" style="font-size:32px;color:var(--P);margin-bottom:8px"></i><div id="pstatus">Processing...</div><div class="pbar"><div class="pfill" id="pfill"></div></div></div>
+  </div>
+
+  <div id="res-area" style="display:none">
+    <div id="clip-meta" style="font-size:13px;color:var(--TM);margin-bottom:12px"></div>
+    <div class="grid" id="clips-grid"></div>
+  </div>
+</div>
+
+<div id="page-pricing" class="page">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:16px"><i class="ti ti-coin" style="color:var(--P)"></i> Pricing</h2>
+  <div class="price-grid">
+    <div class="price-card pop"><div class="sub">⭐ FREE</div><div class="price-name">Free</div><div class="price-amt">$0</div><div class="price-feat">3 clips total · Basic quality</div><button class="price-btn primary" onclick="showAuth()">Get Started</button></div>
+    <div class="price-card"><div class="sub">HOT</div><div class="price-name">Starter</div><div class="price-amt" style="color:var(--P)">$5</div><div class="price-feat">50 clips/mo · 1080p</div><button class="price-btn" onclick="buy('starter')">Subscribe</button></div>
+    <div class="price-card"><div class="price-name">Pro</div><div class="price-amt" style="color:var(--P)">$15</div><div class="price-feat">200 clips/mo · 1080p · Priority</div><button class="price-btn" onclick="buy('pro')">Subscribe</button></div>
+  </div>
+  <div id="pkg-grid" class="price-grid"></div>
+</div>
+
+<div id="page-history" class="page">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:16px"><i class="ti ti-history" style="color:var(--P)"></i> History</h2>
+  <div id="history-list"><p style="color:var(--TM)">Log in to see your clip history.</p></div>
+</div>
+
+<div id="page-stats" class="page">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:16px"><i class="ti ti-chart-bar" style="color:var(--P)"></i> Stats</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;padding:24px"><div style="font-size:12px;color:var(--TM);margin-bottom:4px">Clips Generated</div><div style="font-size:32px;font-weight:800" id="stat-total">0</div></div>
+    <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;padding:24px"><div style="font-size:12px;color:var(--TM);margin-bottom:4px">Credits Used</div><div style="font-size:32px;font-weight:800" id="stat-credits">0</div></div>
+    <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;padding:24px"><div style="font-size:12px;color:var(--TM);margin-bottom:4px">Plan</div><div style="font-size:32px;font-weight:800" id="stat-plan">Free</div></div>
+    <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;padding:24px"><div style="font-size:12px;color:var(--TM);margin-bottom:4px">Remaining</div><div style="font-size:32px;font-weight:800" id="stat-remain">0</div></div>
+  </div>
+</div>
+
+<div id="page-settings" class="page">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:16px"><i class="ti ti-settings" style="color:var(--P)"></i> Settings</h2>
+  <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;overflow:hidden;margin-bottom:12px">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--B);font-weight:600">Account</div>
+    <div style="padding:12px 16px;font-size:13px" id="settings-info">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--TM)">Email</span><span id="set-email">—</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--TM)">Name</span><span id="set-name">—</span></div>
+    </div>
+  </div>
+  <div style="background:var(--W);border:1px solid var(--B);border-radius:14px;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--B);font-weight:600">Billing</div>
+    <div style="padding:12px 16px;font-size:13px" id="settings-plan">Plan: Free</div>
+  </div>
+</div>
+
+</div><!-- main -->
+
+<!-- AUTH MODAL -->
+<div class="modal" id="auth-modal">
+  <div class="modal-inner">
+    <button class="close" onclick="hideAuth()">&times;</button>
+    <h2 id="auth-title">Log In</h2>
+    <div id="auth-form">
+      <!-- Google Sign-In button -->
+      <div id="google-btn-area"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin:16px 0"><div style="flex:1;height:1px;background:var(--B)"></div><span style="font-size:12px;color:var(--TL)">or</span><div style="flex:1;height:1px;background:var(--B)"></div></div>
+      <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="you@email.com"/></div>
+      <div class="form-group"><label>Password</label><input type="password" id="auth-pass" placeholder="Min 6 characters"/></div>
+      <div id="auth-error" class="error" style="margin-bottom:8px"></div>
+      <button class="btn-p" id="auth-btn" onclick="doAuth()">Log In</button>
+    </div>
+    <div class="switch"><span id="auth-switch-text">Don't have an account? </span><a id="auth-switch" onclick="toggleAuth()">Sign Up</a></div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ──────────────────────────────────────────────────────────────────
+var token = localStorage.getItem('kc_token') || null;
+var user = null;
+var isLogin = true;
+var currentJobId = null;
+var jobPollInterval = null;
+var clipIntervals = {};
+var COLS = ["#00AA13","#F59E0B","#10B981","#3B82F6","#8B5CF6","#EF4444","#00AA13","#F59E0B","#EC4899","#10B981"];
+
+// ─── API HELPER ─────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  var r = await fetch(path, opts);
+  if (r.status === 401 && token) { token = null; localStorage.removeItem('kc_token'); user = null; updateUI(); showAuth(); throw new Error('Session expired'); }
+  return r.json();
+}
+
+function finishGen() {
+  document.getElementById('pfill').style.width = '0%';
+  document.getElementById('prog-area').style.display = 'none';
+  var btn = document.getElementById('gen-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-bolt" style="font-size:16px"></i> 🔥 Generate Clips';
+  }
+}
+
+// ─── AUTH ───────────────────────────────────────────────────────────────────
+function showAuth() { if (token) { logout(); return; } document.getElementById('auth-modal').classList.add('show'); }
+function hideAuth() { document.getElementById('auth-modal').classList.remove('show'); }
+
+function toggleAuth() {
+  isLogin = !isLogin;
+  document.getElementById('auth-title').textContent = isLogin ? 'Log In' : 'Sign Up';
+  document.getElementById('auth-btn').textContent = isLogin ? 'Log In' : 'Sign Up';
+  document.getElementById('auth-switch-text').textContent = isLogin ? "Don't have an account? " : "Already have an account? ";
+  document.getElementById('auth-switch').textContent = isLogin ? 'Sign Up' : 'Log In';
+  document.getElementById('auth-error').textContent = '';
+}
+
+async function onGoogleSignIn(response) {
+  try {
+    var d = await api('POST', '/api/auth/google', { credential: response.credential });
+    if (d.error) { document.getElementById('auth-error').textContent = d.error; return; }
+    token = d.token;
+    user = d.user;
+    localStorage.setItem('kc_token', token);
+    hideAuth();
+    updateUI();
+    msg('Signed in with Google!', 'ok');
+  } catch(e) {
+    document.getElementById('auth-error').textContent = 'Google sign-in failed';
+  }
+}
+
+function togChip(el) {
+  el.classList.toggle('active');
+}
+
+// ─── LANG ────────────────────────────────────────────────────────────────────
+var LANG = {
+  en: {
+    hero: 'Generate Viral Clips in Seconds',
+    heroSub: 'Paste a YouTube link — AI finds the best moments and delivers TikTok-ready clips',
+    or: 'or upload a video',
+    urlPlace: 'https://youtube.com/watch?v=...',
+    clickUpload: 'Click to select video or drag & drop',
+    enhance: 'Enhancements:',
+    genBtn: '🔥 Generate Clips',
+    login: 'Login',
+    logout: 'Logout',
+    notLogged: 'Not logged in',
+    freePlan: 'Free plan',
+    credits: 'Credits',
+    loggedIn: 'Logged in!',
+    accCreated: 'Account created!',
+    clickLogin: 'Click to Login',
+  },
+  id: {
+    hero: 'Hasilkan Klip Viral dalam Hitungan Detik',
+    heroSub: 'Tempel link YouTube — AI temukan momen terbaik dan siapkan klip TikTok',
+    or: 'atau unggah video',
+    urlPlace: 'https://youtube.com/watch?v=...',
+    clickUpload: 'Klik untuk pilih video atau seret & lepas',
+    enhance: 'Peningkatan:',
+    genBtn: '🔥 Buat Klip',
+    login: 'Masuk',
+    logout: 'Keluar',
+    notLogged: 'Belum masuk',
+    freePlan: 'Paket gratis',
+    credits: 'Kredit',
+    loggedIn: 'Berhasil masuk!',
+    accCreated: 'Akun berhasil dibuat!',
+    clickLogin: 'Klik untuk Masuk',
+  }
+};
+var lang = 'en';
+
+function setLang(l) {
+  lang = l;
+  document.getElementById('llabel').textContent = l.toUpperCase();
+  var t = LANG[l];
+  if (!t) return;
+  var el = document.getElementById('hero-title'); if (el) el.textContent = t.hero;
+  var el2 = document.getElementById('hero-sub'); if (el2) el2.textContent = t.heroSub;
+  var el3 = document.querySelector('#upload-zone span'); if (el3) el3.textContent = t.clickUpload;
+  var el4 = document.getElementById('url-input'); if (el4) el4.placeholder = t.urlPlace;
+}
+
+function togLang() {
+  setLang(lang === 'en' ? 'id' : 'en');
+}
+
+function logout() {
+  token = null; user = null;
+  localStorage.removeItem('kc_token');
+  updateUI();
+  msg('Logged out', 'ok');
+}
+
+async function doAuth() {
+  var email = document.getElementById('auth-email').value.trim();
+  var pass = document.getElementById('auth-pass').value;
+  var errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Email and password required'; return; }
+
+  try {
+    var ep = isLogin ? '/api/auth/login' : '/api/auth/register';
+    var d = await api('POST', ep, { email: email, password: pass, name: email.split('@')[0] });
+    if (d.error) { errEl.textContent = d.error; return; }
+    token = d.token;
+    user = d.user;
+    localStorage.setItem('kc_token', token);
+    hideAuth();
+    updateUI();
+    msg(isLogin ? 'Logged in!' : 'Account created!', 'ok');
+  } catch(e) { errEl.textContent = 'Connection error'; }
+}
+
+async function loadUser() {
+  if (!token) return;
+  try {
+    var d = await api('GET', '/api/auth/me');
+    if (d.error) return;
+    user = d;
+    updateUI();
+  } catch(e) {}
+}
+
+function updateUI() {
+  var nameEl = document.getElementById('side-name');
+  var planEl = document.getElementById('side-plan');
+  var avatarEl = document.getElementById('side-avatar');
+  var loginBtn = document.getElementById('login-btn');
+  var used = user ? (user.clips_used || 0) : 0;
+  var limit = user ? (user.plan === 'free' ? 3 : user.plan === 'starter' ? 50 : user.plan === 'pro' ? 200 : 999) : 3;
+
+  if (user) {
+    nameEl.textContent = user.name || user.email;
+    planEl.textContent = (user.plan || 'free').charAt(0).toUpperCase() + (user.plan || 'free').slice(1) + ' plan';
+    avatarEl.textContent = (user.name || user.email || '?').charAt(0).toUpperCase();
+    loginBtn.textContent = 'Logout';
+    loginBtn.onclick = logout;
+  } else {
+    nameEl.textContent = 'Not logged in';
+    planEl.textContent = 'Free plan';
+    avatarEl.textContent = '?';
+    loginBtn.textContent = 'Login';
+    loginBtn.onclick = showAuth;
+  }
+
+  document.getElementById('credits-used').textContent = used;
+  document.getElementById('credits-limit').textContent = limit;
+  document.getElementById('badge-credits').textContent = Math.max(0, limit - used);
+
+  var pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  document.getElementById('credits-bar').style.width = pct + '%';
+}
+
+// ─── CLIP GENERATION ────────────────────────────────────────────────────────
+function msg(text, type) {
+  var el = document.getElementById('msg-area');
+  el.innerHTML = '<div class="msg msg-' + (type || 'err') + '">' + text + '</div>';
+  setTimeout(function(){ el.innerHTML = ''; }, type === 'ok' ? 3000 : 6000);
+}
+
+async function gen() {
+  var url = document.getElementById('url-input').value.trim();
+  var fileInput = document.getElementById('upload-input');
+  var file = fileInput.files ? fileInput.files[0] : null;
+  var count = parseInt(document.getElementById('cnt-sel').value) || 10;
+  
+  // Collect feature toggles
+  var features = {};
+  document.querySelectorAll('.toggle-chip').forEach(function(chip) {
+    features[chip.dataset.key] = chip.classList.contains('active');
+  });
+  
+  if (!url && !file) { msg('Paste a YouTube URL or upload a video'); return; }
+  if (url && !url.includes('youtube') && !url.includes('youtu.be')) { msg('Please paste a valid YouTube URL'); return; }
+
+  var btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="font-size:16px;animation:spin 1s linear infinite"></i> Analyzing...';
+  document.getElementById('res-area').style.display = 'none';
+  document.getElementById('prog-area').style.display = 'block';
+  document.getElementById('pfill').style.width = '0%';
+  document.getElementById('pstatus').textContent = 'Analyzing video...';
+
+  // Fake progress for UX
+  var p = 0;
+  var pi = setInterval(function() {
+    p += Math.random() * 6 + 1;
+    if (p > 90) p = 90;
+    document.getElementById('pfill').style.width = p + '%';
+    if (p > 30) document.getElementById('pstatus').textContent = 'Detecting viral moments...';
+    if (p > 60) document.getElementById('pstatus').textContent = 'Scoring and ranking clips...';
+  }, 800);
+
+  try {
+    var d;
+    if (file) {
+      // Upload mode
+      var fd = new FormData();
+      fd.append('video', file);
+      fd.append('count', count);
+      fd.append('features', JSON.stringify(features));
+      var opts = { method: 'POST', body: fd };
+      if (token) opts.headers = { 'Authorization': 'Bearer ' + token };
+      var r = await fetch('/api/analyze', opts);
+      d = await r.json();
+    } else {
+      // URL mode
+      d = await api('POST', '/api/analyze', { url: url, count: count, features: features });
+    }
+    if (d.error) { clearInterval(pi); finishGen(); msg(d.error); return; }
+    currentJobId = d.jobId;
+    pollJob(d.jobId, pi);
+  } catch(e) {
+    clearInterval(pi); finishGen(); msg('Failed to analyze video');
+  }
+}
+
+function pollJob(jobId, pi) {
+  if (jobPollInterval) clearInterval(jobPollInterval);
+  var attempts = 0;
+
+  jobPollInterval = setInterval(async function() {
+    attempts++;
+    try {
+      var job = await api('GET', '/api/job/' + jobId);
+      if (job.status === 'done') {
+        clearInterval(jobPollInterval);
+        jobPollInterval = null;
+        document.getElementById('pfill').style.width = '100%';
+        document.getElementById('pstatus').textContent = 'Complete!';
+        setTimeout(function() { showClips(job); }, 500);
+        return;
+      }
+      if (job.status === 'error') {
+        clearInterval(jobPollInterval);
+        jobPollInterval = null;
+        finishGen();
+        msg(job.error || 'Analysis failed', 'err');
+        return;
+      }
+    } catch(e) {}
+    if (attempts > 40) { // ~2 min timeout
+      clearInterval(jobPollInterval);
+      jobPollInterval = null;
+      finishGen();
+      msg('Analysis timed out. Try again.', 'err');
+    }
+  }, 3000);
+}
+
+function showClips(job) {
+  document.getElementById('prog-area').style.display = 'none';
+  var btn = document.getElementById('gen-btn');
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-bolt" style="font-size:16px"></i> 🔥 Generate Clips';
+
+  var clips = job.clips || [];
+  if (clips.length === 0) { msg('No viral clips detected in this video', 'err'); return; }
+
+  document.getElementById('clip-meta').textContent = job.video_title + ' — ' + clips.length + ' clips found';
+  renderClips(clips);
+
+  // Refresh user data (credits may have changed)
+  loadUser();
+}
+
+function renderClips(clips) {
+  var g = document.getElementById('clips-grid');
+  g.innerHTML = '';
+  document.getElementById('res-area').style.display = 'block';
+
+  clips.forEach(function(c, i) {
+    var col = COLS[i % COLS.length];
+    var dur = formatDuration(c.duration || (c.end_sec - c.start_sec) || 30);
+    var score = c.score || 0;
+    var title = c.hook_text || c.title || 'Clip ' + (i + 1);
+    var hook = c.caption || c.reason || '';
+    var status = c.status || 'pending';
+
+    g.innerHTML += '<div class="card" data-clip-id="' + c.id + '">' +
+      '<div class="thumb" style="background:linear-gradient(135deg,' + col + '22,' + col + '55)">' +
+      '<div class="cicon" style="background:linear-gradient(145deg,' + col + ',' + col + 'cc)"><i class="ti ti-video" style="color:#fff;font-size:20px"></i></div>' +
+      '<div class="cdur">' + dur + '</div>' +
+      '<div class="cscore" style="background:' + col + '22;color:' + col + ';border:1px solid ' + col + '44">' + score + '%</div></div>' +
+      '<div class="cinfo"><div class="ctitle">' + escapeHtml(title) + '</div>' +
+      '<div class="chook">' + escapeHtml(hook.slice(0, 60)) + '</div>' +
+      '<button class="btn-d" id="dlbtn-' + c.id + '" onclick="processClip(\'' + c.id + '\')" style="background:linear-gradient(180deg,' + col + ',' + col + 'cc)">' +
+      '<i class="ti ti-download" style="font-size:12px"></i> ' + getBtnText(status) + '</button></div></div>';
+  });
+}
+
+function getBtnText(status) {
+  if (status === 'done') return 'Download';
+  if (status === 'processing') return 'Processing...';
+  return 'Generate & Download';
+}
+
+function formatDuration(sec) {
+  sec = Math.round(sec || 0);
+  var m = Math.floor(sec / 60);
+  var s = sec % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── CLIP PROCESSING & DOWNLOAD ─────────────────────────────────────────────
+async function processClip(clipId) {
+  if (!token) { showAuth(); return; }
+  if (!currentJobId) { msg('No active job'); return; }
+
+  var btn = document.getElementById('dlbtn-' + clipId);
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  try {
+    var d = await api('POST', '/api/clip', { jobId: currentJobId, clipId: clipId });
+    if (d.error) { msg('Error: ' + d.error, 'err'); btn.disabled = false; btn.textContent = 'Generate & Download'; return; }
+
+    // Poll for clip readiness
+    pollClipStatus(clipId, btn);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Generate & Download';
+    msg('Failed to process clip', 'err');
+  }
+}
+
+function pollClipStatus(clipId, btn) {
+  var attempts = 0;
+  var iv = setInterval(async function() {
+    attempts++;
+    try {
+      var clip = await api('GET', '/api/clip/' + clipId);
+      if (clip.status === 'done') {
+        clearInterval(iv);
+        btn.textContent = 'Download';
+        btn.style.background = 'linear-gradient(180deg,#00C416,#00AA13)';
+        btn.onclick = function() { downloadClip(clipId); };
+        loadUser();
+        return;
+      }
+      if (clip.status === 'error') {
+        clearInterval(iv);
+        btn.disabled = false;
+        btn.textContent = 'Generate & Download';
+        msg('Clip processing error: ' + (clip.error || 'unknown error'), 'err');
+        return;
+      }
+    } catch(e) {}
+    if (attempts > 40) {
+      clearInterval(iv);
+      btn.disabled = false;
+      btn.textContent = 'Generate & Download';
+      msg('Processing timed out', 'err');
+    }
+  }, 3000);
+}
+
+function downloadClip(clipId) {
+  if (!token) { showAuth(); return; }
+  // Use a direct link approach with token in query param
+  var a = document.createElement('a');
+  a.href = '/api/download/' + clipId + '?token=' + encodeURIComponent(token);
+  a.download = 'klikclip-' + clipId + '.mp4';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { msg('Download started! Check your downloads folder.', 'ok'); }, 500);
+}
+
+// ─── PAYMENT ─────────────────────────────────────────────────────────────────
+async function buy(plan) {
+  if (!token) { showAuth(); return; }
+  msg('Payment coming soon via Midtrans!', 'ok');
+  // Future: call /api/payment/create and open Midtrans Snap popup
+}
+
+async function loadPackages() {
+  try {
+    var d = await api('GET', '/api/packages');
+    if (d.packages && d.packages.length > 0) {
+      var el = document.getElementById('pkg-grid');
+      el.innerHTML = '';
+      d.packages.forEach(function(p) {
+        el.innerHTML += '<div class="price-card"><div class="price-name">' + p.name + '</div><div class="price-amt" style="color:var(--P)">Rp ' + (p.amountIdr || '—').toLocaleString() + '</div><div class="price-feat">' + p.credits + ' credits</div><button class="price-btn primary" onclick="buyPackage(\'' + p.id + '\')">Buy</button></div>';
+      });
+    }
+  } catch(e) {}
+}
+
+async function buyPackage(pkgId) {
+  if (!token) { showAuth(); return; }
+  try {
+    var d = await api('POST', '/api/payment/create', { packageId: pkgId });
+    if (d.snapToken) {
+      // Snap popup — will work when Midtrans snap.js is loaded on frontend
+      window.snap.pay(d.snapToken);
+    } else {
+      msg(d.error || 'Payment error', 'err');
+    }
+  } catch(e) { msg('Payment failed', 'err'); }
+}
+
+// ─── HISTORY ─────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  if (!token) { document.getElementById('history-list').innerHTML = '<p style="color:var(--TM)">Log in to see your clip history.</p>'; return; }
+  try {
+    var jobs = await api('GET', '/api/jobs');
+    if (jobs.length === 0) { document.getElementById('history-list').innerHTML = '<p style="color:var(--TM)">No clips generated yet.</p>'; return; }
+    var html = '<div style="display:flex;flex-direction:column;gap:8px">';
+    jobs.forEach(function(j) {
+      var c = (j.clips || []).length;
+      html += '<div class="card" style="padding:14px 16px;cursor:default"><div style="font-weight:600;font-size:13px">' + escapeHtml(j.video_title || 'Untitled') + '</div><div style="font-size:11px;color:var(--TM);margin-top:4px">' + c + ' clips · ' + new Date(j.created_at).toLocaleDateString() + '</div></div>';
+    });
+    html += '</div>';
+    document.getElementById('history-list').innerHTML = html;
+  } catch(e) { document.getElementById('history-list').innerHTML = '<p style="color:var(--TM)">Failed to load history.</p>'; }
+}
+
+function updateStatsAndSettings() {
+  var used = user ? (user.clips_used || 0) : 0;
+  var limit = user ? (user.plan === 'free' ? 3 : user.plan === 'starter' ? 50 : user.plan === 'pro' ? 200 : 999) : 3;
+  var plan = user ? (user.plan || 'free') : 'free';
+  document.getElementById('stat-total').textContent = user ? (user.total_processed || 0) : '—';
+  document.getElementById('stat-credits').textContent = used;
+  document.getElementById('stat-plan').textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
+  document.getElementById('stat-remain').textContent = Math.max(0, limit - used);
+  document.getElementById('set-email').textContent = user ? (user.email || '—') : '—';
+  document.getElementById('set-name').textContent = user ? (user.name || '—') : '—';
+  document.getElementById('settings-plan').textContent = 'Plan: ' + (plan.charAt(0).toUpperCase() + plan.slice(1));
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function go(page) {
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.side-item').forEach(function(i){i.classList.remove('active')});
+  document.querySelectorAll('.side-item').forEach(function(i){
+    if (i.textContent.trim().toLowerCase().includes(page)) i.classList.add('active');
+  });
+  document.getElementById('ptitle').textContent = page.charAt(0).toUpperCase() + page.slice(1);
+
+  if (page === 'history') loadHistory();
+  if (page === 'stats' || page === 'settings') updateStatsAndSettings();
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+if (token) loadUser();
+loadPackages();
+initGoogle();
+
+async function initGoogle() {
+  try {
+    var cfg = await api('GET', '/api/config');
+    if (!cfg.googleClientId) return;
+    // Wait for Google library to load (max 5s)
+    for (var i = 0; i < 50; i++) {
+      if (typeof google !== 'undefined' && google.accounts) break;
+      await new Promise(function(r){setTimeout(r, 100)});
+    }
+    var area = document.getElementById('google-btn-area');
+    if (!area) return;
+    google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: onGoogleSignIn });
+    google.accounts.id.renderButton(area, { type: 'standard', shape: 'pill', theme: 'outline', text: 'signin_with', size: 'large', width: 356 });
+    google.accounts.id.prompt(); // One-tap
+  } catch(e) {} // Google not configured, hide silently
+}
+
+// Upload zone drag/drop + file select
+(function(){
+  var uz = document.getElementById('upload-zone');
+  var ui = document.getElementById('upload-input');
+  if (!uz || !ui) return;
+  uz.addEventListener('dragover',function(e){e.preventDefault();uz.style.borderColor='#00AA13';uz.style.background='#E6F7E8'});
+  uz.addEventListener('dragleave',function(){uz.style.borderColor='var(--B)';uz.style.background=''});
+  uz.addEventListener('drop',function(e){
+    e.preventDefault();uz.style.borderColor='var(--B)';uz.style.background='';
+    if (e.dataTransfer.files.length) { ui.files = e.dataTransfer.files; showUploadName(); }
+  });
+  ui.addEventListener('change',showUploadName);
+  function showUploadName() {
+    if (ui.files && ui.files[0]) {
+      uz.querySelector('span').textContent = '📁 ' + ui.files[0].name;
+      uz.style.borderColor = '#00AA13';
+    }
+  }
+})();
+
+// Add CSS animation
+var style = document.createElement('style');
+style.textContent = '@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }';
+document.head.appendChild(style);
+
+</script>
+</body>
+</html>

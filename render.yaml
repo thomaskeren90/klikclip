@@ -1,0 +1,28 @@
+# KlikClip — AI Viral Clip Factory 🎬
+# Deploy on Render: https://render.com
+
+services:
+  - type: web
+    name: klikclip
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: node api/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: YTDLP_PATH
+        value: bin/yt-dlp
+      - key: FFMPEG_PATH
+        value: bin/ffmpeg
+      - key: OPENCODE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_CLIENT_KEY
+        sync: false
+      - key: PORT
+        value: "3030"

@@ -5,7 +5,9 @@
  * auth, credit tracking, and job management.
  *
  * ENV VARS:
- *   GEMINI_API_KEY
+ *   DEEPSEEK_API_KEY   (primary AI — free tier available)
+ *   GEMINI_API_KEY    (fallback if DeepSeek not configured)
+ *   GOOGLE_CLOUD_PROJECT (only needed if using Gemini AQ. keys)
  *   JWT_SECRET
  *   RENDER_BASE_URL
  *   KLIKCLIP (KV namespace)
@@ -46,35 +48,72 @@ async function jwtVerify(token, secret) {
   }
 }
 
-// Gemini helpers
-async function callGemini(prompt, systemPrompt, apiKey) {
-  var contents = [];
+// AI helpers — DeepSeek (primary) + Gemini (fallback)
+// ENV VARS: DEEPSEEK_API_KEY (primary), GEMINI_API_KEY (fallback)
+async function callAI(prompt, systemPrompt, env) {
+  var dsKey = env.DEEPSEEK_API_KEY;
+  var gmKey = env.GEMINI_API_KEY;
+
+  var messages = [];
   if (systemPrompt) {
-    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-    contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow those instructions.' }] });
+    messages.push({ role: 'system', content: systemPrompt });
   }
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
-  var res = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=' + apiKey,
-    {
+  messages.push({ role: 'user', content: prompt });
+
+  // Primary: DeepSeek (OpenAI-compatible API)
+  if (dsKey) {
+    var dsRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + dsKey },
       body: JSON.stringify({
-        contents: contents,
-        generationConfig: { temperature: 0.4, topP: 0.95, maxOutputTokens: 8192 }
+        model: 'deepseek-chat',
+        messages: messages,
+        temperature: 0.4,
+        max_tokens: 8192
       })
+    });
+    if (dsRes.ok) {
+      var dsData = await dsRes.json();
+      return dsData.choices && dsData.choices[0] && dsData.choices[0].message ? dsData.choices[0].message.content : '';
     }
-  );
-  if (!res.ok) {
-    var errBody = await res.text();
-    return JSON.stringify({geminiError: true, status: res.status, body: errBody.slice(0, 500)});
   }
-  var data = await res.json();
-  var text = '';
-  if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-    text = data.candidates[0].content.parts[0].text || '';
+
+  // Fallback: Gemini (if DeepSeek unavailable or quota issue)
+  if (gmKey) {
+    var gmMessages = [];
+    if (systemPrompt) {
+      gmMessages.push({ role: 'user', parts: [{ text: systemPrompt }] });
+      gmMessages.push({ role: 'model', parts: [{ text: 'Understood.' }] });
+    }
+    gmMessages.push({ role: 'user', parts: [{ text: prompt }] });
+
+    var projectId = env.GOOGLE_CLOUD_PROJECT || '68651145237';
+    var vRes = await fetch('https://us-central1-aiplatform.googleapis.com/v1/projects/' + projectId + '/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': gmKey },
+      body: JSON.stringify({ contents: gmMessages, generationConfig: { temperature: 0.4, maxOutputTokens: 8192 } })
+    });
+
+    if (!vRes.ok) {
+      var gRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + gmKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: gmMessages, generationConfig: { temperature: 0.4, maxOutputTokens: 8192 } })
+      });
+      vRes = gRes.ok ? gRes : null;
+    }
+
+    if (vRes) {
+      var gData = await vRes.json();
+      var text = '';
+      if (gData && gData.candidates && gData.candidates[0] && gData.candidates[0].content && gData.candidates[0].content.parts && gData.candidates[0].content.parts[0]) {
+        text = gData.candidates[0].content.parts[0].text || '';
+      }
+      return text;
+    }
   }
-  return text;
+
+  return '{"error":"No AI provider available. Set DEEPSEEK_API_KEY or GEMINI_API_KEY"}';
 }
 
 function extractJson(text) {
@@ -230,9 +269,7 @@ export default {
     var url = new URL(request.url);
     var method = request.method;
     var kv = getKv(env);
-    var apiKey = env.GEMINI_API_KEY;
-
-    if (!apiKey) { return error('GEMINI_API_KEY not configured', 500); }
+    // AI keys configured via environment — checked inside callAI()
 
     // CORS preflight
     if (method === 'OPTIONS') {
@@ -240,19 +277,6 @@ export default {
     }
 
     // ── Public endpoints (no auth) ──
-
-    // GET /test-gemini
-    if (url.pathname === "/test-gemini" && method === "GET") {
-      try {
-        var gk = env.GEMINI_API_KEY;
-        if (!gk) { return json({ error: "GEMINI_API_KEY not set" }, 500); }
-        var tr = await fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + gk);
-        var td = await tr.json();
-        var ms = [];
-        if (td.models) { for (var i = 0; i < td.models.length; i++) { ms.push(td.models[i].name.split("/").pop()); } }
-        return json({ keyPrefix: gk.slice(0,12) + "...", status: tr.status, models: ms.slice(0,15) });
-      } catch (ex) { return json({ error: ex.message }, 500); }
-    }
 
     // GET /health
     if (url.pathname === '/health' && method === 'GET') {
@@ -270,12 +294,12 @@ export default {
     }
 
     // POST /transcript
-    if (url.pathname === '/transcript' && method === 'POST') { try {
+    if (url.pathname === '/transcript' && method === 'POST') {
       var body = await request.json();
       if (!body.videoId) { return error('videoId required'); }
-      var raw = await callGemini(
+      var raw = await callAI(
         'Generate a detailed transcript with timestamps for the YouTube video with ID: ' + body.videoId + '. Return ONLY valid JSON: { "videoId": "' + body.videoId + '", "segments": [{ "start": 0, "end": 30, "text": "..." }], "duration": 0 }',
-        null, apiKey
+        null, env
       );
       var data = extractJson(raw);
       return json({
@@ -285,27 +309,25 @@ export default {
       });
     }
 
-    } catch (e_t) { return json({ error: 'transcript failed', msg: e_t.message }, 500); } }
     // POST /summarize
-    if (url.pathname === '/summarize' && method === 'POST') { try {
+    if (url.pathname === '/summarize' && method === 'POST') {
       var body = await request.json();
       var text = body.text || body.transcript;
       if (!text) { return error('text or transcript required'); }
-      var raw = await callGemini('Transcript:\n\n' + text.slice(0, 30000), SUMMARIZE_PROMPT, apiKey);
+      var raw = await callAI('Transcript:\n\n' + text.slice(0, 30000), SUMMARIZE_PROMPT, env);
       var data = extractJson(raw);
       return json({ summary: (data && data.summary) ? data.summary : [] });
     }
 
-    } catch (e_s) { return json({ error: 'summarize failed', msg: e_s.message }, 500); } }
     // POST /ask
-    if (url.pathname === '/ask' && method === 'POST') { try {
+    if (url.pathname === '/ask' && method === 'POST') {
       var body = await request.json();
       var question = body.question || body.q;
       var context = body.context || body.transcript || '';
       if (!question) { return error('question required'); }
-      var raw = await callGemini(
+      var raw = await callAI(
         'Context:\n' + context.slice(0, 30000) + '\n\nQuestion: ' + question,
-        'Answer based only on the provided context.', apiKey
+        'Answer based only on the provided context.', env
       );
       return json({ answer: raw, question: question });
     }
@@ -400,7 +422,7 @@ export default {
             var langLabel = (language === 'id') ? 'Indonesian' : 'English';
             var prompt = 'Video style: ' + styleHint + '\nLanguage: ' + langLabel + '\nNumber of clips: ' + count + '\n\nTranscript:\n' + transcript.slice(0, 50000);
 
-            var raw = await callGemini(prompt, HIGHLIGHT_SYSTEM_PROMPT, apiKey);
+            var raw = await callAI(prompt, HIGHLIGHT_SYSTEM_PROMPT, env);
             var hd = extractJson(raw);
 
             var updated = await getJob(kv, jobId);
@@ -525,7 +547,7 @@ export default {
       if (regenJob.userId !== userId) { return error('Access denied', 403); }
 
       var rePrompt = 'User adjusted clip ' + clipId + ' to ' + clipStart + 's-' + clipEnd + 's (' + (clipEnd - clipStart).toFixed(1) + 's). Is this a good TikTok clip length? Ideal: 15-60s. Return JSON: { "clip_id": "' + clipId + '", "duration_ok": true, "warning": null, "revised_engagement_score": 0, "suggested_hook": "..." }';
-      var raw = await callGemini(rePrompt, null, apiKey);
+      var raw = await callAI(rePrompt, null, env);
       var regenData = extractJson(raw);
 
       var updated = await getJob(kv, regenMatch[1]);

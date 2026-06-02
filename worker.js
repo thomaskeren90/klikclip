@@ -538,14 +538,6 @@ export default {
         }
       }
 
-      // Fallback: If the original videoUrl is a YouTube link, return a timestamped URL
-      var originalUrl = dlJob.videoUrl || '';
-      var ytId = originalUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-      var watchUrl = originalUrl;
-      if (ytId && foundClip.startTime !== undefined) {
-        watchUrl = 'https://www.youtube.com/watch?v=' + ytId[1] + '&t=' + Math.floor(foundClip.startTime) + 's';
-      }
-
       return json({
         clip: {
           id: foundClip.id, startTime: foundClip.startTime,
@@ -554,8 +546,7 @@ export default {
           engagementScore: foundClip.engagementScore,
           emotion: foundClip.emotion, whyViral: foundClip.whyViral,
         },
-        watchUrl: watchUrl,
-        note: 'Direct video download requires Render backend. Click watchUrl to preview on YouTube at the clip timestamp.',
+        note: 'Video processing pending.',
       });
     }
 

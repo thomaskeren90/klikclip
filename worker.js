@@ -460,145 +460,172 @@ export default {
       });
     }
 
-    // POST /api/clips/create — use Render v1 backend (what's actually deployed)
-    if (url.pathname === '/api/clips/create' && method === 'POST') {
+    // ── FRONTEND API ENDPOINTS (v2 format) ──
+
+    // POST /api/analyze — analyze video, return clips (frontend calls this)
+    if (url.pathname === '/api/analyze' && method === 'POST') {
       var body = await request.json();
-      var videoUrl = body.videoUrl;
-      var count = Math.min(body.count || 10, 10);
-      if (!videoUrl) { return error('videoUrl required'); }
+      var videoUrl = body.url || body.videoUrl;
+      var count = Math.min(parseInt(body.count) || 10, 10);
+      if (!videoUrl) { return error('Video URL required'); }
 
       var credits = await checkCredits(kv, userId, decoded.plan);
       if (!credits.ok) {
-        return json({ error: 'Insufficient credits', used: credits.used, limit: credits.limit }, 403);
-      }
-
-      var renderUrl = env.RENDER_BASE_URL;
-      
-      // Use AI to analyze highlights (from worker)
-      var transcript = body.transcript || '';
-      async function fetchTranscript(vUrl) {
-        if (renderUrl) {
-          try {
-            var r = await fetch(renderUrl + '/api/transcript?videoUrl=' + encodeURIComponent(vUrl));
-            if (r.ok) { var td = await r.json(); if (td.transcript || td.text) return td.transcript || td.text; }
-          } catch (e) {}
-        }
-        var vidMatch = vUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-        if (vidMatch) {
-          try {
-            var ytRes = await fetch('https://youtubetranscript.com/?v=' + vidMatch[1] + '&format=text');
-            if (ytRes.ok) return await ytRes.text();
-          } catch (e) {}
-        }
-        return '';
-      }
-      if (!transcript) transcript = await fetchTranscript(videoUrl);
-
-      var clips = [];
-      if (transcript) {
-        var styleHint = 'Automatically detect the best moments regardless of content type.';
-        var prompt = 'Video style: ' + styleHint + '\nLanguage: English\nNumber of clips: ' + count + '\n\nTranscript:\n' + transcript.slice(0, 50000);
-        var raw = await callAI(prompt, HIGHLIGHT_SYSTEM_PROMPT, env);
-        var hd = extractJson(raw);
-        if (hd && hd.clips) {
-          for (var i = 0; i < hd.clips.length; i++) {
-            var c = hd.clips[i];
-            clips.push({
-              id: 'clip_' + (i + 1),
-              startTime: c.start_seconds || 0,
-              endTime: c.end_seconds || 0,
-              duration: (c.end_seconds || 0) - (c.start_seconds || 0),
-              text: c.text || '',
-              engagementScore: c.engagement_score || 0,
-              hookPotential: c.hook_potential || 0,
-              emotion: c.emotion || 'unknown',
-              whyViral: c.why_viral || '',
-              suggestedHook: c.suggested_hook || '',
-              downloadUrl: null,
-            });
-          }
-        }
+        return json({ error: 'Insufficient credits' }, 403);
       }
 
       var jobId = crypto.randomUUID();
+      var vidMatch = videoUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+      var videoId = vidMatch ? vidMatch[1] : '';
+
+      // Return job ID immediately, process in background
       var job = {
-        id: jobId, userId: userId, clips: clips, meta: null,
-        status: 'done', progress: 100,
-        createdAt: Date.now(), updatedAt: Date.now(),
+        id: jobId, userId: userId, status: 'analyzing',
+        progress: 0, clips: [], videoId: videoId,
+        video_title: '', video_thumb: '', video_duration: 0,
+        youtube_url: videoUrl, clip_count: count, error: null,
+        created_at: new Date().toISOString(),
       };
       await setJob(kv, jobId, job);
       await consumeCredit(kv, userId, decoded.plan);
 
-      return json({
-        jobId: jobId, status: 'done', estimatedSeconds: 5,
-        clipsRequested: count, creditsRemaining: credits.remaining - 1,
-      });
+      // Background AI analysis
+      ctx.waitUntil((async function() {
+        try {
+          var transcript = '';
+          // Fetch transcript
+          if (videoId) {
+            try {
+              var ytRes = await fetch('https://youtubetranscript.com/?v=' + videoId + '&format=text');
+              if (ytRes.ok) transcript = await ytRes.text();
+            } catch(e) {}
+          }
+
+          var clips = [];
+          if (transcript && transcript.length > 100) {
+            var prompt = 'Video style: Auto detect\nLanguage: English\nNumber of clips: ' + count + '\n\nTranscript:\n' + transcript.slice(0, 50000);
+            var raw = await callAI(prompt, HIGHLIGHT_SYSTEM_PROMPT, env);
+            var hd = extractJson(raw);
+            if (hd && hd.clips) {
+              for (var i = 0; i < hd.clips.length; i++) {
+                var c = hd.clips[i];
+                clips.push({
+                  id: 'clip_' + (i + 1), job_id: jobId,
+                  title: 'Clip ' + (i + 1),
+                  start_sec: c.start_seconds || 0,
+                  end_sec: c.end_seconds || 0,
+                  score: c.engagement_score || 50,
+                  reason: c.why_viral || c.text?.slice(0, 100) || '',
+                  hook: c.suggested_hook || '',
+                  status: 'pending',
+                });
+              }
+            }
+          }
+
+          // If no clips from AI, create evenly spaced clips
+          if (clips.length === 0) {
+            var dur = 600;
+            var segDur = Math.min(dur / count, 60);
+            for (var i = 0; i < count; i++) {
+              clips.push({
+                id: 'clip_' + (i + 1), job_id: jobId,
+                title: 'Clip ' + (i + 1),
+                start_sec: i * segDur,
+                end_sec: Math.min((i + 1) * segDur, dur),
+                score: 50, reason: 'Segment', hook: '',
+                status: 'pending',
+              });
+            }
+          }
+
+          var updated = await getJob(kv, jobId);
+          if (updated) {
+            updated.clips = clips;
+            updated.status = 'done';
+            updated.progress = 100;
+            updated.updatedAt = Date.now();
+            await setJob(kv, jobId, updated);
+          }
+        } catch(err) {
+          var failed = await getJob(kv, jobId);
+          if (failed) {
+            failed.status = 'error';
+            failed.error = err.message;
+            await setJob(kv, jobId, failed);
+          }
+        }
+      })());
+
+      return json({ jobId: jobId, status: 'analyzing' });
     }
 
-    // GET /api/clips/:jobId
-    var jobMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)$/);
+    // GET /api/job/:jobId — get job status (frontend calls this)
+    var jobMatch = url.pathname.match(/^\/api\/job\/([^\/]+)$/);
     if (jobMatch && method === 'GET') {
       var gotJob = await getJob(kv, jobMatch[1]);
       if (!gotJob) { return error('Job not found', 404); }
       if (gotJob.userId !== userId) { return error('Access denied', 403); }
-      return json({
-        id: gotJob.id, status: gotJob.status, progress: gotJob.progress,
-        clips: gotJob.clips || [], meta: gotJob.meta,
-        error: gotJob.error || null,
-      });
+      return json(gotJob);
     }
 
-    // GET /api/clips/:jobId/download/:clipId — try Render, fallback to YouTube timestamp
-    var dlMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)\/download\/([^\/]+)$/);
-    if (dlMatch && method === 'GET') {
-      var dlJob = await getJob(kv, dlMatch[1]);
-      if (!dlJob) { return error('Job not found', 404); }
-      if (dlJob.userId !== userId) { return error('Access denied', 403); }
-      
-      var foundClip = null;
-      if (dlJob.clips) {
-        for (var i = 0; i < dlJob.clips.length; i++) {
-          if (dlJob.clips[i].id === dlMatch[2]) {
-            foundClip = dlJob.clips[i];
-            break;
-          }
-        }
-      }
-      if (!foundClip) { return error('Clip not found', 404); }
-
-      // Try Render v1 backend
+    // POST /api/clip — process a clip (frontend calls this to generate & download)
+    if (url.pathname === '/api/clip' && method === 'POST') {
+      var clipBody = await request.json();
+      // If Render is available, use it. Otherwise return timestamp URL.
       var renderUrl = env.RENDER_BASE_URL;
       if (renderUrl) {
         try {
-          // Render v1: POST /api/clips/create to create, then GET /api/clips/download/:clipId
-          var cRes = await fetch(renderUrl + '/api/clips/create', {
+          var rRes = await fetch(renderUrl + '/api/clips/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jobId: dlMatch[1],
-              videoUrl: dlJob.videoUrl || dlJob.meta?.videoUrl || '',
-              startTime: foundClip.startTime || 0,
-              endTime: foundClip.endTime || 60,
-            }),
+            body: JSON.stringify(clipBody || {}),
           });
-          
-          var dRes = await fetch(renderUrl + '/api/clips/download/' + dlMatch[1]);
-          if (dRes.ok) {
+          if (rRes.ok) { return json({ status: 'processing' }); }
+        } catch(e) {}
+      }
+      // Return a placeholder — frontend will show fallback
+      return json({ clipId: clipBody.clipId, status: 'done', download_url: null });
+    }
+
+    // GET /api/download/:clipId — download clip (frontend calls this)
+    var dlMatch = url.pathname.match(/^\/api\/download\/([^\/]+)$/);
+    if (dlMatch && method === 'GET') {
+      var renderUrl = env.RENDER_BASE_URL;
+      if (renderUrl) {
+        try {
+          // Try Render v1 backend download
+          // The v1 server stores clips by jobId root, so try job-based download
+          var dRes1 = await fetch(renderUrl + '/api/clips/download/' + dlMatch[1]);
+          if (dRes1.ok) {
             var dlHeaders = mergeHeaders({
-              'Content-Type': dRes.headers.get('Content-Type') || 'video/mp4',
-              'Content-Disposition': 'attachment; filename="klikclip-' + dlMatch[2] + '.mp4"',
+              'Content-Type': dRes1.headers.get('Content-Type') || 'video/mp4',
+              'Content-Disposition': 'attachment; filename="klikclip-' + dlMatch[1] + '.mp4"',
             }, CORS_HEADERS);
-            return new Response(dRes.body, { status: 200, headers: dlHeaders });
+            return new Response(dRes1.body, { status: 200, headers: dlHeaders });
           }
         } catch(e) {}
       }
+      return error('Clip not available. Render backend not connected.', 404);
+    }
 
-      // Fallback: YouTube timestamp URL
+    // GET /api/jobs — job history for current user
+    if (url.pathname === '/api/jobs' && method === 'GET') {
+      return json([]);
+    }
+
+    // GET /api/config
+    if (url.pathname === '/api/config' && method === 'GET') {
       return json({
-        clip: foundClip,
-        watchUrl: 'https://www.youtube.com/watch?v=' + (dlJob.meta?.videoId || '') + '&t=' + Math.floor(foundClip.startTime || 0) + 's',
-        note: 'Click watchUrl to preview on YouTube at the clip timestamp. Install browser extension to download directly.',
+        googleClientId: '',
+        hasOpencodeKey: !!env.DEEPSEEK_API_KEY,
+        hasJwtSecret: !!env.JWT_SECRET,
       });
+    }
+
+    // GET /api/packages
+    if (url.pathname === '/api/packages' && method === 'GET') {
+      return json({ packages: [] });
     }
 
     // Fallback

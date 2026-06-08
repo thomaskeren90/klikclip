@@ -332,6 +332,108 @@ export default {
       return json({ answer: raw, question: question });
     }
 
+    // ── AUTH ENDPOINTS (public) ──
+
+    // POST /api/auth/register
+    if (url.pathname === '/api/auth/register' && method === 'POST') {
+      var body = await request.json();
+      var email = (body.email || '').trim().toLowerCase();
+      var pass = body.password || '';
+      var name = body.name || email.split('@')[0];
+      if (!email || pass.length < 6) { return error('Valid email and password (min 6 chars) required'); }
+      var existing = await getUser(kv, 'email:' + email);
+      if (existing) { return error('Email already registered'); }
+      var enc = new TextEncoder();
+      var hash = await crypto.subtle.digest('SHA-256', enc.encode(email + ':' + pass));
+      var hashStr = Array.from(new Uint8Array(hash)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+      var userId = crypto.randomUUID();
+      var userData = { id: userId, email: email, name: name, plan: 'free', creditsUsed: 0, creditPeriodStart: Date.now(), createdAt: Date.now() };
+      await setUser(kv, userId, userData);
+      await setUser(kv, 'email:' + email, { id: userId });
+      var secret = env.JWT_SECRET || 'klikclip-dev-secret';
+      var payload = JSON.stringify({ sub: userId, email: email, name: name, plan: 'free', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 });
+      var enc2 = new TextEncoder();
+      var header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      var payB64 = btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      var key = await crypto.subtle.importKey('raw', enc2.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      var sig = await crypto.subtle.sign('HMAC', key, enc2.encode(header + '.' + payB64));
+      var sigB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      return json({ token: header + '.' + payB64 + '.' + sigB64, user: { id: userId, email: email, name: name, plan: 'free' } });
+    }
+
+    // POST /api/auth/login
+    if (url.pathname === '/api/auth/login' && method === 'POST') {
+      var body = await request.json();
+      var email = (body.email || '').trim().toLowerCase();
+      var pass = body.password || '';
+      if (!email || !pass) { return error('Email and password required'); }
+      var emailRef = await getUser(kv, 'email:' + email);
+      if (!emailRef) { return error('Invalid email or password'); }
+      var user = await getUser(kv, emailRef.id);
+      if (!user) { return error('User not found'); }
+      var enc = new TextEncoder();
+      var hash = await crypto.subtle.digest('SHA-256', enc.encode(email + ':' + pass));
+      var hashStr = Array.from(new Uint8Array(hash)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+      if (user.passwordHash && user.passwordHash !== hashStr) { return error('Invalid email or password'); }
+      var secret = env.JWT_SECRET || 'klikclip-dev-secret';
+      var payload = JSON.stringify({ sub: user.id, email: user.email, name: user.name, plan: user.plan || 'free', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 });
+      var enc2 = new TextEncoder();
+      var header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      var payB64 = btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      var key = await crypto.subtle.importKey('raw', enc2.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      var sig = await crypto.subtle.sign('HMAC', key, enc2.encode(header + '.' + payB64));
+      var sigB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      return json({ token: header + '.' + payB64 + '.' + sigB64, user: { id: user.id, email: user.email, name: user.name, plan: user.plan || 'free' } });
+    }
+
+    // POST /api/auth/google
+    if (url.pathname === '/api/auth/google' && method === 'POST') {
+      var body = await request.json();
+      var credential = body.credential;
+      if (!credential) { return error('Google credential required'); }
+      try {
+        var gRes = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + credential);
+        if (!gRes.ok) { return error('Invalid Google token'); }
+        var gData = await gRes.json();
+        var email = (gData.email || '').toLowerCase();
+        var name = gData.name || gData.given_name || email.split('@')[0];
+        if (!email) { return error('Google email not available'); }
+        var emailRef = await getUser(kv, 'email:' + email);
+        var user;
+        if (emailRef) {
+          user = await getUser(kv, emailRef.id);
+        }
+        if (!user) {
+          var userId = crypto.randomUUID();
+          user = { id: userId, email: email, name: name, plan: 'free', creditsUsed: 0, creditPeriodStart: Date.now(), googleId: gData.sub, createdAt: Date.now() };
+          await setUser(kv, userId, user);
+          await setUser(kv, 'email:' + email, { id: userId });
+        }
+        var secret = env.JWT_SECRET || 'klikclip-dev-secret';
+        var payload = JSON.stringify({ sub: user.id, email: user.email, name: user.name, plan: user.plan || 'free', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 });
+        var enc2 = new TextEncoder();
+        var header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+        var payB64 = btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        var key = await crypto.subtle.importKey('raw', enc2.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        var sig = await crypto.subtle.sign('HMAC', key, enc2.encode(header + '.' + payB64));
+        var sigB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        return json({ token: header + '.' + payB64 + '.' + sigB64, user: { id: user.id, email: user.email, name: user.name, plan: user.plan || 'free' } });
+      } catch(e) { return error('Google sign-in failed: ' + e.message); }
+    }
+
+    // GET /api/auth/me
+    if (url.pathname === '/api/auth/me' && method === 'GET') {
+      var token = requireAuth(request);
+      if (!token) { return error('Not authenticated', 401); }
+      var secret = env.JWT_SECRET || 'klikclip-dev-secret';
+      var decoded = await jwtVerify(token, secret);
+      if (!decoded) { return error('Invalid token', 401); }
+      var uid = decoded.sub || decoded.id || decoded.userId;
+      var u = await getUser(kv, uid);
+      if (!u) { return error('User not found', 404); }
+      return json({ id: u.id, email: u.email, name: u.name, plan: u.plan || 'free', creditsUsed: u.creditsUsed || 0 });
+    }
+
     // ── Auth check ──
 
     var token = requireAuth(request);
@@ -538,6 +640,14 @@ export default {
         }
       }
 
+      // Fallback: If the original videoUrl is a YouTube link, return a timestamped URL
+      var originalUrl = dlJob.videoUrl || '';
+      var ytId = originalUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+      var watchUrl = originalUrl;
+      if (ytId && foundClip.startTime !== undefined) {
+        watchUrl = 'https://www.youtube.com/watch?v=' + ytId[1] + '&t=' + Math.floor(foundClip.startTime) + 's';
+      }
+
       return json({
         clip: {
           id: foundClip.id, startTime: foundClip.startTime,
@@ -546,7 +656,8 @@ export default {
           engagementScore: foundClip.engagementScore,
           emotion: foundClip.emotion, whyViral: foundClip.whyViral,
         },
-        note: 'Video processing pending.',
+        watchUrl: watchUrl,
+        note: 'Direct video download requires Render backend. Click watchUrl to preview on YouTube at the clip timestamp.',
       });
     }
 

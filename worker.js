@@ -460,12 +460,10 @@ export default {
       });
     }
 
-    // POST /api/clips/create
+    // POST /api/clips/create — delegate to Render v2 backend
     if (url.pathname === '/api/clips/create' && method === 'POST') {
       var body = await request.json();
       var videoUrl = body.videoUrl;
-      var style = body.style || 'auto';
-      var language = body.language || 'en';
       var count = Math.min(body.count || 10, 10);
       if (!videoUrl) { return error('videoUrl required'); }
 
@@ -474,237 +472,142 @@ export default {
         return json({ error: 'Insufficient credits', used: credits.used, limit: credits.limit }, 403);
       }
 
-      var jobId = crypto.randomUUID();
+      var renderUrl = env.RENDER_BASE_URL;
+      if (!renderUrl) { return error('Render backend not configured'); }
+
+      // Delegate to Render backend
+      var rRes = await fetch(renderUrl + '/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+        },
+        body: JSON.stringify({ url: videoUrl, count: count }),
+      });
+
+      if (!rRes.ok) {
+        var errData = await rRes.json().catch(function(){return {};});
+        return error(errData.error || 'Render backend error', rRes.status);
+      }
+
+      var rData = await rRes.json();
+      var jobId = rData.jobId;
+
+      // Store job reference locally
       var job = {
-        id: jobId, userId: userId, videoUrl: videoUrl,
-        style: style, language: language, clipCount: count,
+        id: jobId, userId: userId, renderJobId: jobId,
+        videoUrl: videoUrl, clipCount: count,
         status: 'analyzing', progress: 0, clips: [], meta: null,
         createdAt: Date.now(), updatedAt: Date.now(),
       };
-      await setJob(kv, jobId, job);
+      await setJob(kv, 'wrk:' + jobId, job);
       await consumeCredit(kv, userId, decoded.plan);
 
-      // Background processing
+      // Poll for results in background
       ctx.waitUntil((async function() {
-        try {
-          var renderUrl = env.RENDER_BASE_URL;
-          if (renderUrl) {
-            await fetch(renderUrl + '/api/clips/create', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + token,
-              },
-              body: JSON.stringify({
-                jobId: jobId, videoUrl: videoUrl,
-                style: style, count: count, language: language,
-              }),
-            });
-          }
-
-          var transcript = body.transcript || '';
-          // Try fetching transcript from multiple sources
-          async function fetchTranscript(vUrl) {
-            // Source 1: Render backend (if configured)
-            if (renderUrl) {
-              try {
-                var r = await fetch(renderUrl + '/api/transcript?videoUrl=' + encodeURIComponent(vUrl));
-                if (r.ok) {
-                  var td = await r.json();
-                  if (td.transcript || td.text) return td.transcript || td.text;
-                }
-              } catch (e) {}
-            }
-            // Source 2: Free YouTube transcript API
-            var vidMatch = vUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-            if (vidMatch) {
-              try {
-                var ytRes = await fetch('https://youtubetranscript.com/?v=' + vidMatch[1] + '&format=text');
-                if (ytRes.ok) {
-                  return await ytRes.text();
-                }
-              } catch (e) {}
-            }
-            return '';
-          }
-          if (!transcript) {
-            transcript = await fetchTranscript(videoUrl);
-          }
-
-          if (transcript) {
-            var styleHints = {
-              podcast: 'Focus on strong opinions, surprising facts, emotional moments.',
-              gaming: 'Focus on highlights, celebrations, fails, clutch moments.',
-              vlog: 'Focus on funny moments, beautiful shots, emotional content.',
-              auto: 'Automatically detect the best moments regardless of content type.',
-            };
-            var styleHint = styleHints[style] || styleHints.auto;
-            var langLabel = (language === 'id') ? 'Indonesian' : 'English';
-            var prompt = 'Video style: ' + styleHint + '\nLanguage: ' + langLabel + '\nNumber of clips: ' + count + '\n\nTranscript:\n' + transcript.slice(0, 50000);
-
-            var raw = await callAI(prompt, HIGHLIGHT_SYSTEM_PROMPT, env);
-            var hd = extractJson(raw);
-
-            var updated = await getJob(kv, jobId);
-            if (updated) {
-              updated.clips = [];
-              if (hd && hd.clips) {
-                for (var i = 0; i < hd.clips.length; i++) {
-                  var c = hd.clips[i];
-                  updated.clips.push({
-                    id: 'clip_' + (i + 1),
-                    startTime: c.start_seconds || 0,
-                    endTime: c.end_seconds || 0,
-                    duration: (c.end_seconds || 0) - (c.start_seconds || 0),
-                    text: c.text || '',
-                    engagementScore: c.engagement_score || 0,
-                    hookPotential: c.hook_potential || 0,
-                    emotion: c.emotion || 'unknown',
-                    whyViral: c.why_viral || '',
-                    suggestedHook: c.suggested_hook || '',
+        var maxPolls = 30;
+        for (var i = 0; i < maxPolls; i++) {
+          await new Promise(function(r){setTimeout(r, 3000)});
+          try {
+            var jRes = await fetch(renderUrl + '/api/job/' + jobId);
+            if (!jRes.ok) continue;
+            var jData = await jRes.json();
+            if (jData.status === 'done' || jData.status === 'error') {
+              var local = await getJob(kv, 'wrk:' + jobId);
+              if (local) {
+                local.status = jData.status;
+                local.progress = 100;
+                local.clips = (jData.clips || []).map(function(c, idx){
+                  return {
+                    id: c.id || 'clip_' + (idx+1),
+                    startTime: c.start_sec || 0,
+                    endTime: c.end_sec || 0,
+                    duration: (c.end_sec || 0) - (c.start_sec || 0),
+                    text: c.reason || c.title || '',
+                    engagementScore: c.score || 50,
+                    emotion: 'auto',
                     downloadUrl: null,
-                  });
-                }
+                  };
+                });
+                local.meta = { jobId: jobId, videoTitle: jData.video_title || '' };
+                local.updatedAt = Date.now();
+                await setJob(kv, 'wrk:' + jobId, local);
               }
-              updated.meta = hd ? (hd.meta || null) : null;
-              updated.status = 'processing';
-              updated.progress = 30;
-              updated.updatedAt = Date.now();
-              await setJob(kv, jobId, updated);
+              break;
             }
-          }
-        } catch (err) {
-          var failed = await getJob(kv, jobId);
-          if (failed) {
-            failed.status = 'failed';
-            failed.error = err.message;
-            failed.updatedAt = Date.now();
-            await setJob(kv, jobId, failed);
-          }
+          } catch(e) {}
         }
       })());
 
       return json({
-        jobId: jobId, status: 'analyzing', estimatedSeconds: 120,
+        jobId: jobId, status: 'analyzing', estimatedSeconds: 60,
         clipsRequested: count, creditsRemaining: credits.remaining - 1,
       });
     }
 
-    // GET /api/clips/:jobId
+    // GET /api/clips/:jobId — proxy to Render
     var jobMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)$/);
     if (jobMatch && method === 'GET') {
-      var gotJob = await getJob(kv, jobMatch[1]);
-      if (!gotJob) { return error('Job not found', 404); }
-      if (gotJob.userId !== userId) { return error('Access denied', 403); }
-      return json({
-        id: gotJob.id, status: gotJob.status, progress: gotJob.progress,
-        clips: gotJob.clips || [], meta: gotJob.meta, style: gotJob.style,
-        error: gotJob.error || null,
-      });
-    }
-
-    // GET /api/clips/:jobId/download/:clipId
-    var dlMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)\/download\/([^\/]+)$/);
-    if (dlMatch && method === 'GET') {
-      var dlJob = await getJob(kv, dlMatch[1]);
-      if (!dlJob) { return error('Job not found', 404); }
-      if (dlJob.userId !== userId) { return error('Access denied', 403); }
-
-      var foundClip = null;
-      if (dlJob.clips) {
-        for (var i = 0; i < dlJob.clips.length; i++) {
-          if (dlJob.clips[i].id === dlMatch[2]) {
-            foundClip = dlJob.clips[i];
-            break;
-          }
-        }
+      var localJob = await getJob(kv, 'wrk:' + jobMatch[1]);
+      if (localJob && localJob.clips && localJob.clips.length > 0 && localJob.status === 'done') {
+        return json({
+          id: localJob.id, status: localJob.status, progress: 100,
+          clips: localJob.clips, meta: localJob.meta, error: null,
+        });
       }
-      if (!foundClip) { return error('Clip not found', 404); }
-
-      if (foundClip.downloadUrl) {
-        return Response.redirect(foundClip.downloadUrl, 302);
-      }
-
       var renderUrl = env.RENDER_BASE_URL;
       if (renderUrl) {
-        var proxyRes = await fetch(
-          renderUrl + '/api/clips/' + dlMatch[1] + '/download/' + dlMatch[2],
-          { headers: { 'Authorization': 'Bearer ' + token } }
-        );
-        if (proxyRes.ok) {
-          var dlHeaders = mergeHeaders({
-            'Content-Type': proxyRes.headers.get('Content-Type') || 'video/mp4',
-            'Content-Disposition': 'attachment; filename="' + dlMatch[2] + '.mp4"',
-          }, CORS_HEADERS);
-          return new Response(proxyRes.body, { status: 200, headers: dlHeaders });
-        }
+        try {
+          var jRes = await fetch(renderUrl + '/api/job/' + jobMatch[1]);
+          if (jRes.ok) {
+            var jData = await jRes.json();
+            return json(jData);
+          }
+        } catch(e) {}
       }
-
-      // Fallback: If the original videoUrl is a YouTube link, return a timestamped URL
-      var originalUrl = dlJob.videoUrl || '';
-      var ytId = originalUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-      var watchUrl = originalUrl;
-      if (ytId && foundClip.startTime !== undefined) {
-        watchUrl = 'https://www.youtube.com/watch?v=' + ytId[1] + '&t=' + Math.floor(foundClip.startTime) + 's';
-      }
-
-      return json({
-        clip: {
-          id: foundClip.id, startTime: foundClip.startTime,
-          endTime: foundClip.endTime, duration: foundClip.duration,
-          text: foundClip.text,
-          engagementScore: foundClip.engagementScore,
-          emotion: foundClip.emotion, whyViral: foundClip.whyViral,
-        },
-        watchUrl: watchUrl,
-        note: 'Direct video download requires Render backend. Click watchUrl to preview on YouTube at the clip timestamp.',
-      });
+      return error('Job not found', 404);
     }
 
-    // POST /api/clips/:jobId/regenerate
+    // GET /api/clips/:jobId/download/:clipId — proxy to Render
+    var dlMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)\/download\/([^\/]+)$/);
+    if (dlMatch && method === 'GET') {
+      var renderUrl = env.RENDER_BASE_URL;
+      if (!renderUrl) { return error('Render backend not configured'); }
+      
+      var dlRes = await fetch(renderUrl + '/api/download/' + dlMatch[2] + '?token=' + encodeURIComponent(token));
+      if (dlRes.ok) {
+        var dlHeaders = mergeHeaders({
+          'Content-Type': dlRes.headers.get('Content-Type') || 'video/mp4',
+          'Content-Disposition': 'attachment; filename="klikclip-' + dlMatch[2] + '.mp4"',
+        }, CORS_HEADERS);
+        return new Response(dlRes.body, { status: 200, headers: dlHeaders });
+      }
+      return error('Clip not found or not ready', 404);
+    }
+
+    // POST /api/clips/:jobId/regenerate — proxy to Render
     var regenMatch = url.pathname.match(/^\/api\/clips\/([^\/]+)\/regenerate$/);
     if (regenMatch && method === 'POST') {
       var body = await request.json();
-      var clipId = body.clipId;
-      var clipStart = body.startTime;
-      var clipEnd = body.endTime;
-      if (!clipId || clipStart === undefined || clipEnd === undefined) {
-        return error('clipId, startTime, and endTime required');
+      var renderUrl = env.RENDER_BASE_URL;
+      if (renderUrl) {
+        try {
+          var rRes = await fetch(renderUrl + '/api/clip', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token,
+            },
+            body: JSON.stringify({
+              jobId: regenMatch[1],
+              clipId: body.clipId,
+              caption: body.caption || '',
+            }),
+          });
+          if (rRes.ok) { return json({ clipId: body.clipId, status: 'processing' }); }
+        } catch(e) {}
       }
-      var regenJob = await getJob(kv, regenMatch[1]);
-      if (!regenJob) { return error('Job not found', 404); }
-      if (regenJob.userId !== userId) { return error('Access denied', 403); }
-
-      var rePrompt = 'User adjusted clip ' + clipId + ' to ' + clipStart + 's-' + clipEnd + 's (' + (clipEnd - clipStart).toFixed(1) + 's). Is this a good TikTok clip length? Ideal: 15-60s. Return JSON: { "clip_id": "' + clipId + '", "duration_ok": true, "warning": null, "revised_engagement_score": 0, "suggested_hook": "..." }';
-      var raw = await callAI(rePrompt, null, env);
-      var regenData = extractJson(raw);
-
-      var updated = await getJob(kv, regenMatch[1]);
-      if (updated && updated.clips) {
-        for (var i = 0; i < updated.clips.length; i++) {
-          if (updated.clips[i].id === clipId) {
-            updated.clips[i].startTime = clipStart;
-            updated.clips[i].endTime = clipEnd;
-            updated.clips[i].duration = clipEnd - clipStart;
-            if (regenData && regenData.revised_engagement_score) {
-              updated.clips[i].engagementScore = regenData.revised_engagement_score;
-            }
-            if (regenData && regenData.suggested_hook) {
-              updated.clips[i].suggestedHook = regenData.suggested_hook;
-            }
-            updated.clips[i].manuallyAdjusted = true;
-            updated.updatedAt = Date.now();
-            break;
-          }
-        }
-        await setJob(kv, regenMatch[1], updated);
-      }
-
-      return json({
-        clipId: clipId, startTime: clipStart, endTime: clipEnd,
-        duration: clipEnd - clipStart,
-        analysis: regenData || { duration_ok: true },
-      });
+      return error('Regenerate failed', 500);
     }
 
     // Fallback

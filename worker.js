@@ -279,8 +279,7 @@ export default {
   async fetch(request, env, ctx) {
     var url = new URL(request.url);
     var method = request.method;
-    var kv = env.KLIKCLIP || null;
-    if (!kv) return json({error:"KV namespace KLIKCLIP not bound. Go to Cloudflare dashboard > Bindings and add it."},500);
+    var kv = getKv(env);
     // AI keys configured via environment — checked inside callAI()
 
     // CORS preflight

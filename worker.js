@@ -129,8 +129,19 @@ function extractJson(text) {
   return null;
 }
 
-// KV helpers
-function getKv(env) { return env.KLIKCLIP || null; }
+// KV helpers — in-memory fallback when KV namespace not bound
+var MEMKV = new Map();
+function getKv(env) {
+  if (env && env.KLIKCLIP) return env.KLIKCLIP;
+  // Fallback: in-memory Map (data lost on restart, OK for MVP/free tier)
+  console.warn('[KV] KLIKCLIP namespace not bound, using in-memory fallback');
+  return {
+    get: function(key) { return Promise.resolve(MEMKV.get(key) || null); },
+    put: function(key, val) { MEMKV.set(key, val); return Promise.resolve(); },
+    delete: function(key) { MEMKV.delete(key); return Promise.resolve(); },
+    list: function() { return Promise.resolve({ keys: Array.from(MEMKV.keys()).map(function(k) { return { name: k }; }) }); },
+  };
+}
 
 async function getUser(kv, userId) {
   if (!kv) { return null; }

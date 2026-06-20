@@ -1,3 +1,8 @@
 name = "late-boat-8297"
 main = "worker.js"
 compatibility_date = "2026-06-01"
+
+# KV Namespace for storing user data, jobs, credits
+[[kv_namespaces]]
+binding = "KLIKCLIP"
+id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"

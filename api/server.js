@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-const { requireAuth, optionalAuth, register, login, checkAndDecrementQuota, addCredits, loadUsers, saveUsers, PLAN_LIMITS } = require('./lib/Auth');
+const { requireAuth, optionalAuth, register, login, checkAndDecrementQuota, addCredits, loadUsers, saveUsers, PLAN_LIMITS, SECRET } = require('./lib/Auth');
 const { createSnapToken, verifyWebhookSignature, isPaymentSuccess, CREDIT_PACKAGES, getPackage } = require('./lib/Midtrans');
 const { getVideoInfo, downloadVideo, processClip, cleanupTmp, getClipPath, clipExists } = require('./lib/Clipper');
 const { detectHighlights, fallbackHighlights } = require('./lib/AIHighlight');
@@ -325,8 +325,7 @@ app.get('/api/download/:clipId', (req, res) => {
   if (!token) return res.status(401).json({ error: 'Token required' });
   try {
     const jwt = require('jsonwebtoken');
-    const secret = process.env.JWT_SECRET || require('crypto').randomBytes(32).toString('hex');
-    jwt.verify(token, secret);
+    jwt.verify(token, SECRET);
   } catch {
     return res.status(401).json({ error: 'Invalid token' });
   }

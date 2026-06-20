@@ -124,4 +124,4 @@ function addCredits(userId, amount) {
   return true;
 }
 
-module.exports = { requireAuth, optionalAuth, register, login, checkAndDecrementQuota, addCredits, generateToken, loadUsers, saveUsers, PLAN_LIMITS };
+module.exports = { requireAuth, optionalAuth, register, login, checkAndDecrementQuota, addCredits, generateToken, loadUsers, saveUsers, PLAN_LIMITS, SECRET };

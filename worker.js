@@ -60,13 +60,13 @@ async function callAI(prompt, systemPrompt, env) {
   }
   messages.push({ role: 'user', content: prompt });
 
-  // Primary: DeepSeek (OpenAI-compatible API)
+  // Primary: DeepSeek V4 Flash via OpenCode Go (OpenAI-compatible API)
   if (dsKey) {
-    var dsRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    var dsRes = await fetch('https://opencode.ai/zen/go/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + dsKey },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: messages,
         temperature: 0.4,
         max_tokens: 8192
@@ -587,9 +587,12 @@ export default {
       var renderUrl = env.RENDER_BASE_URL;
       if (renderUrl) {
         try {
-          var rRes = await fetch(renderUrl + '/api/clips/create', {
+          var rRes = await fetch(renderUrl + '/api/clip', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': request.headers.get('Authorization') || ''
+            },
             body: JSON.stringify(clipBody || {}),
           });
           if (rRes.ok) { return json({ status: 'processing' }); }
@@ -605,9 +608,10 @@ export default {
       var renderUrl = env.RENDER_BASE_URL;
       if (renderUrl) {
         try {
-          // Try Render v1 backend download
-          // The v1 server stores clips by jobId root, so try job-based download
-          var dRes1 = await fetch(renderUrl + '/api/clips/download/' + dlMatch[1]);
+          // Forward to Render's download route, with auth so it can verify the JWT
+          var dRes1 = await fetch(renderUrl + '/api/download/' + dlMatch[1], {
+            headers: { 'Authorization': request.headers.get('Authorization') || '' }
+          });
           if (dRes1.ok) {
             var dlHeaders = mergeHeaders({
               'Content-Type': dRes1.headers.get('Content-Type') || 'video/mp4',

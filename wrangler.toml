@@ -2,6 +2,7 @@ name = "late-boat-8297"
 main = "worker.js"
 compatibility_date = "2024-12-01"
 
+# Trigger redeploy — picked up custom domain routes removal
 # Serve static assets for non-API routes
 [site]
 bucket = "./public"

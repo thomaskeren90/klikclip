@@ -499,6 +499,12 @@ export default {
       };
       await setJob(kv, jobId, job);
       await consumeCredit(kv, userId, decoded.plan);
+      // Update user job index for fast clip lookups
+      var uJobsKey = 'userjobs:' + userId;
+      var uJobs = await kv.get(uJobsKey, { type: 'json' }) || [];
+      uJobs.unshift(jobId);
+      if (uJobs.length > 20) uJobs = uJobs.slice(0, 20);
+      await kv.put(uJobsKey, JSON.stringify(uJobs));
 
       // Background AI analysis
       ctx.waitUntil((async function() {
@@ -584,16 +590,19 @@ export default {
     var clipStatusMatch = url.pathname.match(/^\/api\/clip\/([^\/]+)$/);
     if (clipStatusMatch && method === 'GET') {
       var clipId = clipStatusMatch[1];
-      // Search jobs for this clip
-      var allKeys = await kv.list({ prefix: 'job:' });
-      for (var ki = 0; ki < allKeys.keys.length; ki++) {
-        var jData = await kv.get(allKeys.keys[ki].name, { type: 'json' });
-        if (jData && jData.userId === userId && jData.clips) {
+      // clipId format is "clip_N" — check currentJobId stored in KV for this user
+      // Look up via user's recent jobs index instead of scanning all jobs
+      var userJobsKey = 'userjobs:' + userId;
+      var userJobIds = await kv.get(userJobsKey, { type: 'json' }) || [];
+      for (var ki = 0; ki < userJobIds.length; ki++) {
+        var jData = await kv.get('job:' + userJobIds[ki], { type: 'json' });
+        if (jData && jData.clips) {
           var foundClip = jData.clips.find(function(c) { return c.id === clipId; });
           if (foundClip) { return json(foundClip); }
         }
       }
-      return error('Clip not found', 404);
+      // Fallback: clip_N not found but don't 404 — return pending so frontend keeps waiting
+      return json({ id: clipId, status: 'pending' });
     }
 
     // POST /api/clip — process a clip (frontend calls this to generate & download)

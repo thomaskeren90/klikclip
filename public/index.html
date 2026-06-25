@@ -590,7 +590,7 @@ function pollClipStatus(clipId, btn) {
   var iv = setInterval(async function() {
     attempts++;
     try {
-      var clip = await api('GET', '/api/clip/' + clipId);
+      var clip = await api('GET', '/api/clip/' + clipId + (currentJobId ? '?jobId=' + currentJobId : ''));
       if (clip.status === 'done') {
         clearInterval(iv);
         btn.textContent = 'Download';

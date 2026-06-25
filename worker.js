@@ -590,18 +590,26 @@ export default {
     var clipStatusMatch = url.pathname.match(/^\/api\/clip\/([^\/]+)$/);
     if (clipStatusMatch && method === 'GET') {
       var clipId = clipStatusMatch[1];
-      // clipId format is "clip_N" — check currentJobId stored in KV for this user
-      // Look up via user's recent jobs index instead of scanning all jobs
-      var userJobsKey = 'userjobs:' + userId;
-      var userJobIds = await kv.get(userJobsKey, { type: 'json' }) || [];
-      for (var ki = 0; ki < userJobIds.length; ki++) {
-        var jData = await kv.get('job:' + userJobIds[ki], { type: 'json' });
-        if (jData && jData.clips) {
+      // jobId passed as query param for direct lookup — no scanning needed
+      var jobId = url.searchParams.get('jobId');
+      if (jobId) {
+        var jData = await getJob(kv, jobId);
+        if (jData && jData.userId === userId && jData.clips) {
           var foundClip = jData.clips.find(function(c) { return c.id === clipId; });
           if (foundClip) { return json(foundClip); }
         }
+      } else {
+        // Fallback: check user job index (no KV list scan)
+        var uJobsKey = 'userjobs:' + userId;
+        var uJobIds = await kv.get(uJobsKey, { type: 'json' }) || [];
+        for (var ki = 0; ki < uJobIds.length; ki++) {
+          var jData2 = await getJob(kv, uJobIds[ki]);
+          if (jData2 && jData2.clips) {
+            var fc = jData2.clips.find(function(c) { return c.id === clipId; });
+            if (fc) { return json(fc); }
+          }
+        }
       }
-      // Fallback: clip_N not found but don't 404 — return pending so frontend keeps waiting
       return json({ id: clipId, status: 'pending' });
     }
 

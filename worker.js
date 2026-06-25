@@ -580,6 +580,22 @@ export default {
       return json(gotJob);
     }
 
+    // GET /api/clip/:clipId — get clip status (frontend polls this)
+    var clipStatusMatch = url.pathname.match(/^\/api\/clip\/([^\/]+)$/);
+    if (clipStatusMatch && method === 'GET') {
+      var clipId = clipStatusMatch[1];
+      // Search jobs for this clip
+      var allKeys = await kv.list({ prefix: 'job:' });
+      for (var ki = 0; ki < allKeys.keys.length; ki++) {
+        var jData = await kv.get(allKeys.keys[ki].name, { type: 'json' });
+        if (jData && jData.userId === userId && jData.clips) {
+          var foundClip = jData.clips.find(function(c) { return c.id === clipId; });
+          if (foundClip) { return json(foundClip); }
+        }
+      }
+      return error('Clip not found', 404);
+    }
+
     // POST /api/clip — process a clip (frontend calls this to generate & download)
     if (url.pathname === '/api/clip' && method === 'POST') {
       var clipBody = await request.json();

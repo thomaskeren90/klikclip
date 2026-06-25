@@ -287,26 +287,6 @@ export default {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    // ── Serve static frontend for non-API routes ──
-    if (method === 'GET' && !url.pathname.startsWith('/api/') &&
-        url.pathname !== '/health' && url.pathname !== '/transcript' &&
-        url.pathname !== '/summarize' && url.pathname !== '/ask') {
-      try {
-        const assetKey = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-        const body = await env.__STATIC_CONTENT.get(assetKey, { type: 'arrayBuffer' });
-        if (body) {
-          const ext = assetKey.split('.').pop();
-          const types = { html: 'text/html', js: 'application/javascript', css: 'text/css', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon', json: 'application/json' };
-          return new Response(body, { headers: { 'Content-Type': types[ext] || 'text/plain' } });
-        }
-      } catch(e) {}
-      // SPA fallback — serve index.html for all unknown paths
-      try {
-        const html = await env.__STATIC_CONTENT.get('index.html', { type: 'text' });
-        if (html) return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-      } catch(e) {}
-    }
-
     // ── Public endpoints (no auth) ──
 
     // GET /health
@@ -662,25 +642,6 @@ export default {
     if (url.pathname === '/api/packages' && method === 'GET') {
       return json({ packages: [] });
     }
-
-    // Serve static assets (frontend)
-    try {
-      return await env.__STATIC_CONTENT.get(
-        url.pathname === '/' ? 'index.html' : url.pathname.slice(1),
-        { type: 'arrayBuffer' }
-      ).then(body => {
-        if (!body) throw new Error('not found');
-        const ext = url.pathname.split('.').pop();
-        const types = { html: 'text/html', js: 'application/javascript', css: 'text/css', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon' };
-        return new Response(body, { headers: { 'Content-Type': types[ext] || 'text/plain' } });
-      });
-    } catch(e) {}
-
-    // Fallback — serve index.html for SPA routing
-    try {
-      const html = await env.__STATIC_CONTENT.get('index.html', { type: 'text' });
-      if (html) return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-    } catch(e) {}
 
     // Fallback
     return error('Not found', 404);

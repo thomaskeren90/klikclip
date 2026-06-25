@@ -1,8 +1,16 @@
 name = "late-boat-8297"
 main = "worker.js"
-compatibility_date = "2026-06-01"
+compatibility_date = "2024-12-01"
 
-# KV Namespace for storing user data, jobs, credits
+# KV namespace — user accounts, jobs, credits
 [[kv_namespaces]]
 binding = "KLIKCLIP"
-id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+id = "1b24578f09ff4aca8bc37050cd203a6b"
+
+# Static assets
+[site]
+bucket = "./public"
+
+# Non-secret env vars
+[vars]
+RENDER_BASE_URL = "https://klikclip.onrender.com"

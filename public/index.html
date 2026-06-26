@@ -586,29 +586,11 @@ async function processClip(clipId) {
       btn.style.background = 'linear-gradient(180deg,#00C416,#00AA13)';
       btn.onclick = function() { downloadClip(clipId, d.download_url); };
       loadUser();
-      msg('Clip ready!', 'ok');
+      msg('Clip ready! Click Download to save.', 'ok');
     } else {
-      // Fallback: start polling if somehow async
+      // Fallback to polling
       pollClipStatus(clipId, btn);
     }
-  } catch(e) {
-    btn.disabled = false;
-    btn.textContent = 'Generate & Download';
-    msg('Failed to process clip', 'err');
-  }
-}
-
-  var btn = document.getElementById('dlbtn-' + clipId);
-  if (!btn || btn.disabled) return;
-  btn.disabled = true;
-  btn.textContent = 'Processing...';
-
-  try {
-    var d = await api('POST', '/api/clip', { jobId: currentJobId, clipId: clipId });
-    if (d.error) { msg('Error: ' + d.error, 'err'); btn.disabled = false; btn.textContent = 'Generate & Download'; return; }
-
-    // Poll for clip readiness
-    pollClipStatus(clipId, btn);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Generate & Download';
@@ -621,7 +603,7 @@ function pollClipStatus(clipId, btn) {
   var iv = setInterval(async function() {
     attempts++;
     try {
-      var clip = await api('GET', '/api/clip/' + clipId + (currentJobId ? '?jobId=' + currentJobId : ''));
+      var clip = await api('GET', '/api/clip/' + clipId);
       if (clip.status === 'done') {
         clearInterval(iv);
         btn.textContent = 'Download';
@@ -644,12 +626,11 @@ function pollClipStatus(clipId, btn) {
       btn.textContent = 'Generate & Download';
       msg('Processing timed out', 'err');
     }
-  }, 5000);
+  }, 3000);
 }
 
 function downloadClip(clipId, directUrl) {
   if (!token) { showAuth(); return; }
-  // Use direct download URL if provided, otherwise proxy through Worker
   var a = document.createElement('a');
   a.href = directUrl || ('/api/download/' + clipId + '?token=' + encodeURIComponent(token));
   a.download = 'klikclip-' + clipId + '.mp4';

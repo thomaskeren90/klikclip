@@ -644,7 +644,7 @@ export default {
           var clipJob = clipJobId ? await getJobCached(kv, clipJobId) : null;
           var clipInfo = clipJob && clipJob.clips ? clipJob.clips.find(function(c) { return c.id === clipId; }) : null;
 
-          var rRes = await fetch(renderUrl + '/api/clip', {
+          var rRes = await fetch(renderUrl + '/api/clip/direct', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

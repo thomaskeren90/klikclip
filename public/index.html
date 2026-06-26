@@ -613,10 +613,7 @@ function pollClipStatus(clipId, btn) {
       btn.textContent = 'Generate & Download';
       msg('Processing timed out', 'err');
     }
-  }, 3000);
-}
-
-function downloadClip(clipId) {
+  }, 5000);
   if (!token) { showAuth(); return; }
   // Use a direct link approach with token in query param
   var a = document.createElement('a');

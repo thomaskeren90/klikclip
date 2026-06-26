@@ -13,6 +13,25 @@
  *   KLIKCLIP (KV namespace)
  */
 
+// In-memory job cache — reduces KV reads during polling
+// Workers can reuse isolates, so this cache survives across requests in the same isolate
+var JOB_CACHE = new Map(); // jobId -> { data, ts }
+var JOB_CACHE_TTL = 2000; // 2 seconds
+
+async function getJobCached(kv, jobId) {
+  var now = Date.now();
+  var cached = JOB_CACHE.get(jobId);
+  if (cached && (now - cached.ts) < JOB_CACHE_TTL) { return cached.data; }
+  var data = await getJob(kv, jobId);
+  JOB_CACHE.set(jobId, { data: data, ts: now });
+  // Keep cache small
+  if (JOB_CACHE.size > 50) {
+    var oldest = JOB_CACHE.keys().next().value;
+    JOB_CACHE.delete(oldest);
+  }
+  return data;
+}
+
 // HIGHLIGHT DETECTION PROMPT (exact from spec)
 var HIGHLIGHT_SYSTEM_PROMPT = "You are a viral clip detector for TikTok/Shorts.\nYou analyze video transcripts and find the BEST moments to clip.\n\nFor every moment, rate:\n- engagement_score (0-100): Will people rewatch this?\n- hook_potential (0-100): Does this stop the scroll?\n- emotion: funny|shocking|inspiring|controversial|educational|emotional\n- why_viral: Brief explanation\n\nReturn ONLY valid JSON. No markdown, no code fences, no extra text:\n{\n  \"clips\": [\n    {\n      \"start_seconds\": 154.5,\n      \"end_seconds\": 189.2,\n      \"text\": \"transcript of this segment\",\n      \"engagement_score\": 92,\n      \"hook_potential\": 88,\n      \"emotion\": \"shocking\",\n      \"why_viral\": \"Creator reveals unexpected statistic that contradicts common belief\",\n      \"suggested_hook\": \"Wait until you hear this...\"\n    }\n  ],\n  \"meta\": {\n    \"best_clip\": \"clip_3\",\n    \"overall_score\": 85,\n    \"estimated_virality\": \"high\"\n  }\n}";
 
@@ -580,7 +599,7 @@ export default {
     // GET /api/job/:jobId — get job status (frontend calls this)
     var jobMatch = url.pathname.match(/^\/api\/job\/([^\/]+)$/);
     if (jobMatch && method === 'GET') {
-      var gotJob = await getJob(kv, jobMatch[1]);
+      var gotJob = await getJobCached(kv, jobMatch[1]);
       if (!gotJob) { return error('Job not found', 404); }
       if (gotJob.userId !== userId) { return error('Access denied', 403); }
       return json(gotJob);
@@ -593,7 +612,7 @@ export default {
       // jobId passed as query param for direct lookup — no scanning needed
       var jobId = url.searchParams.get('jobId');
       if (jobId) {
-        var jData = await getJob(kv, jobId);
+        var jData = await getJobCached(kv, jobId);
         if (jData && jData.userId === userId && jData.clips) {
           var foundClip = jData.clips.find(function(c) { return c.id === clipId; });
           if (foundClip) { return json(foundClip); }

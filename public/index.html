@@ -574,6 +574,37 @@ async function processClip(clipId) {
 
   try {
     var d = await api('POST', '/api/clip', { jobId: currentJobId, clipId: clipId });
+    if (d.error || d.status === 'error') {
+      btn.disabled = false;
+      btn.textContent = 'Generate & Download';
+      msg('Error: ' + (d.error || 'unknown error'), 'err');
+      return;
+    }
+    if (d.status === 'done' && d.download_url) {
+      btn.disabled = false;
+      btn.textContent = 'Download';
+      btn.style.background = 'linear-gradient(180deg,#00C416,#00AA13)';
+      btn.onclick = function() { downloadClip(clipId, d.download_url); };
+      loadUser();
+      msg('Clip ready!', 'ok');
+    } else {
+      // Fallback: start polling if somehow async
+      pollClipStatus(clipId, btn);
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Generate & Download';
+    msg('Failed to process clip', 'err');
+  }
+}
+
+  var btn = document.getElementById('dlbtn-' + clipId);
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  try {
+    var d = await api('POST', '/api/clip', { jobId: currentJobId, clipId: clipId });
     if (d.error) { msg('Error: ' + d.error, 'err'); btn.disabled = false; btn.textContent = 'Generate & Download'; return; }
 
     // Poll for clip readiness
@@ -614,10 +645,13 @@ function pollClipStatus(clipId, btn) {
       msg('Processing timed out', 'err');
     }
   }, 5000);
+}
+
+function downloadClip(clipId, directUrl) {
   if (!token) { showAuth(); return; }
-  // Use a direct link approach with token in query param
+  // Use direct download URL if provided, otherwise proxy through Worker
   var a = document.createElement('a');
-  a.href = '/api/download/' + clipId + '?token=' + encodeURIComponent(token);
+  a.href = directUrl || ('/api/download/' + clipId + '?token=' + encodeURIComponent(token));
   a.download = 'klikclip-' + clipId + '.mp4';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function() { msg('Download started! Check your downloads folder.', 'ok'); }, 500);

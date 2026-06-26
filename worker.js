@@ -632,26 +632,51 @@ export default {
       return json({ id: clipId, status: 'pending' });
     }
 
-    // POST /api/clip — process a clip (frontend calls this to generate & download)
+    // POST /api/clip — process a clip synchronously, return download_url when done
     if (url.pathname === '/api/clip' && method === 'POST') {
       var clipBody = await request.json();
-      // If Render is available, use it. Otherwise return timestamp URL.
       var renderUrl = env.RENDER_BASE_URL;
       if (renderUrl) {
         try {
+          // Find clip details from job
+          var clipJobId = clipBody.jobId;
+          var clipId = clipBody.clipId;
+          var clipJob = clipJobId ? await getJobCached(kv, clipJobId) : null;
+          var clipInfo = clipJob && clipJob.clips ? clipJob.clips.find(function(c) { return c.id === clipId; }) : null;
+
           var rRes = await fetch(renderUrl + '/api/clip', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': request.headers.get('Authorization') || ''
             },
-            body: JSON.stringify(clipBody || {}),
+            body: JSON.stringify({
+              jobId: clipJobId,
+              clipId: clipId,
+              youtubeUrl: clipJob ? clipJob.youtube_url : clipBody.youtubeUrl,
+              startSec: clipInfo ? clipInfo.start_sec : clipBody.startSec,
+              endSec: clipInfo ? clipInfo.end_sec : clipBody.endSec,
+            }),
           });
-          if (rRes.ok) { return json({ status: 'processing' }); }
-        } catch(e) {}
+          if (rRes.ok) {
+            var rData = await rRes.json();
+            // Update clip status in KV
+            if (clipJob && clipInfo) {
+              clipInfo.status = 'done';
+              clipInfo.download_url = rData.download_url || null;
+              await setJob(kv, clipJobId, clipJob);
+              JOB_CACHE.delete(clipJobId); // Bust cache
+            }
+            return json({ status: 'done', clipId: clipId, download_url: rData.download_url });
+          } else {
+            var errText = await rRes.text();
+            return json({ status: 'error', error: errText }, 500);
+          }
+        } catch(e) {
+          return json({ status: 'error', error: e.message }, 500);
+        }
       }
-      // Return a placeholder — frontend will show fallback
-      return json({ clipId: clipBody.clipId, status: 'done', download_url: null });
+      return json({ status: 'error', error: 'Render backend not configured' }, 500);
     }
 
     // GET /api/download/:clipId — download clip (frontend calls this)

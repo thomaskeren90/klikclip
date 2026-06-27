@@ -27,15 +27,22 @@ const FFMPEG = findBin('ffmpeg');
 
 // Common yt-dlp options to avoid bot detection
 const COOKIES_PATH = '/etc/secrets/cookies.txt';
-const YTDLP_OPTS = [
-  '--extractor-retries 3',
-  '--geo-bypass',
-  '--extractor-args "youtube:player_client=android,web"',
-  '--user-agent "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36"',
-  '--add-header "Accept-Language:en-US,en;q=0.9"',
-  '--no-check-certificates',
-  `--cookies ${COOKIES_PATH}`,
-].filter(Boolean).join(' ');
+const COOKIES_OPTS = fs.existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : '';
+
+function buildYtdlpCmd(youtubeUrl, outputPath, extraOpts = '') {
+  const baseOpts = [
+    '--no-check-certificates',
+    '--geo-bypass',
+    '--extractor-retries 3',
+    '--no-playlist',
+    '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best"',
+    '--merge-output-format mp4',
+    `-o "${outputPath}"`,
+    COOKIES_OPTS,
+    extraOpts,
+  ].filter(Boolean).join(' ');
+  return `${YTDLP} ${baseOpts} "${youtubeUrl}"`;
+}
 
 console.log('[Clipper] YTDLP:', YTDLP);
 console.log('[Clipper] FFMPEG:', FFMPEG);
@@ -123,17 +130,37 @@ async function getVideoInfo(youtubeUrl) {
 // ─── Download best quality (for FFmpeg processing) ────────────────────────────
 async function downloadVideo(youtubeUrl, videoId) {
   const outputPath = path.join(TMP_DIR, `${videoId}.%(ext)s`);
-  // Download best quality up to 1080p to keep processing fast
-  const cmd = `${YTDLP} ${YTDLP_OPTS} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4 -o "${outputPath}" --no-playlist "${youtubeUrl}"`;
-  await execAsync(cmd, { timeout: 300000 }); // 5 min timeout
 
-  const mp4 = path.join(TMP_DIR, `${videoId}.mp4`);
-  if (fs.existsSync(mp4)) return mp4;
+  // Try multiple strategies to bypass bot detection
+  const strategies = [
+    // Strategy 1: cookies + android client
+    `--extractor-args "youtube:player_client=android" ${COOKIES_OPTS}`,
+    // Strategy 2: cookies + ios client  
+    `--extractor-args "youtube:player_client=ios" ${COOKIES_OPTS}`,
+    // Strategy 3: cookies only, default client
+    COOKIES_OPTS,
+    // Strategy 4: no cookies, mweb client
+    '--extractor-args "youtube:player_client=mweb"',
+  ].filter(s => s.trim());
 
-  // Fallback: find any downloaded file
-  const files = fs.readdirSync(TMP_DIR).filter(f => f.startsWith(videoId));
-  if (files[0]) return path.join(TMP_DIR, files[0]);
-  throw new Error('Download failed: no output file found');
+  let lastError;
+  for (const strategy of strategies) {
+    try {
+      const cmd = buildYtdlpCmd(youtubeUrl, outputPath, strategy);
+      console.log('[Clipper] Trying strategy:', strategy.slice(0, 60));
+      await execAsync(cmd, { timeout: 300000 });
+
+      const mp4 = path.join(TMP_DIR, `${videoId}.mp4`);
+      if (fs.existsSync(mp4)) return mp4;
+
+      const files = fs.readdirSync(TMP_DIR).filter(f => f.startsWith(videoId));
+      if (files[0]) return path.join(TMP_DIR, files[0]);
+    } catch (err) {
+      console.log('[Clipper] Strategy failed:', err.message.slice(0, 100));
+      lastError = err;
+    }
+  }
+  throw new Error('All download strategies failed: ' + (lastError ? lastError.message.slice(0, 200) : 'unknown'));
 }
 
 // ─── Cut + Crop 9:16 + Burn captions ─────────────────────────────────────────

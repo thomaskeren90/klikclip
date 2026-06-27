@@ -26,14 +26,15 @@ const YTDLP = findBin('yt-dlp');
 const FFMPEG = findBin('ffmpeg');
 
 // Common yt-dlp options to avoid bot detection
+const COOKIES_PATH = '/etc/secrets/cookies.txt';
 const YTDLP_OPTS = [
   '--extractor-retries 3',
   '--geo-bypass',
-  '--extractor-args "youtube:player_client=tv_embedded,ios"',
+  '--extractor-args "youtube:player_client=android,web"',
   '--user-agent "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36"',
   '--add-header "Accept-Language:en-US,en;q=0.9"',
   '--no-check-certificates',
-  '--compat-options no-youtube-unavailable-videos',
+  `--cookies ${COOKIES_PATH}`,
 ].filter(Boolean).join(' ');
 
 console.log('[Clipper] YTDLP:', YTDLP);

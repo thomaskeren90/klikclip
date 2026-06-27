@@ -15,10 +15,8 @@ fi
 bin/ffmpeg -version 2>&1 | head -1
 
 echo "=== Installing yt-dlp ==="
-if [ ! -f bin/yt-dlp ]; then
-  curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp
-  chmod a+rx bin/yt-dlp
-fi
+curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp
+chmod a+rx bin/yt-dlp
 bin/yt-dlp --version
 
 echo "=== Installing Node packages ==="

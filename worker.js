@@ -418,7 +418,7 @@ export default {
 
     // GET /api/auth/google/url — get Google OAuth URL
     if (url.pathname === '/api/auth/google/url' && method === 'GET') {
-      var clientId = env.GOOGLE_CLIENT_ID || 'GOOGLE_CLIENT_ID';
+      var clientId = env.GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID || '';
       var redirectUri = encodeURIComponent(url.origin + '/api/auth/google/callback');
       var scope = encodeURIComponent([
         'openid',
@@ -455,8 +455,8 @@ export default {
       if (!storedState) { return error('Invalid or expired state'); }
       await kv.delete('oauth_state:' + state);
       try {
-        var clientId = env.GOOGLE_CLIENT_ID || 'GOOGLE_CLIENT_ID';
-        var clientSecret = env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET';
+        var clientId = env.GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID || '';
+        var clientSecret = env.GOOGLE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET || '';
         var redirectUri = url.origin + '/api/auth/google/callback';
         // Exchange code for tokens
         var tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -597,8 +597,8 @@ export default {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'refresh_token=' + encodeURIComponent(ytTokens.refresh_token) +
-            '&client_id=GOOGLE_CLIENT_ID' +
-            '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET') +
+            '&client_id=GOOGLE_CLIENT_ID_PLACEHOLDER' +
+            '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET || '') +
             '&grant_type=refresh_token',
         });
         var refreshed = await refreshRes.json();
@@ -792,8 +792,8 @@ export default {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: 'refresh_token=' + encodeURIComponent(ytTok.refresh_token) +
-                  '&client_id=GOOGLE_CLIENT_ID' +
-                  '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET') +
+                  '&client_id=GOOGLE_CLIENT_ID_PLACEHOLDER' +
+                  '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET || '') +
                   '&grant_type=refresh_token',
               });
               var rfData = await rfRes.json();

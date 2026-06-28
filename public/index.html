@@ -585,10 +585,9 @@ async function loadYouTubeVideos() {
   try {
     var r = await api('GET', '/api/youtube/channels');
     if (r.connected && r.videos && r.videos.length > 0) {
-      // Show YouTube videos in the input area
       var select = document.getElementById('yt-videos-select');
       if (select) {
-        select.innerHTML = '<option value="">-- Pick a video from your channel --</option>' +
+        select.innerHTML = '<option value="">-- Pick from your channel --</option>' +
           r.videos.map(function(v) {
             return '<option value="' + v.url + '">' + v.title.slice(0, 60) + '</option>';
           }).join('');
@@ -597,6 +596,8 @@ async function loadYouTubeVideos() {
     }
   } catch(e) {}
 }
+
+async function processClip(clipId) {
   if (!token) { showAuth(); return; }
   if (!currentJobId) { msg('No active job'); return; }
 

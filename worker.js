@@ -416,7 +416,103 @@ export default {
       return json({ token: header + '.' + payB64 + '.' + sigB64, user: { id: user.id, email: user.email, name: user.name, plan: user.plan || 'free' } });
     }
 
-    // POST /api/auth/google
+    // GET /api/auth/google/url — get Google OAuth URL
+    if (url.pathname === '/api/auth/google/url' && method === 'GET') {
+      var clientId = env.GOOGLE_CLIENT_ID || 'GOOGLE_CLIENT_ID';
+      var redirectUri = encodeURIComponent(url.origin + '/api/auth/google/callback');
+      var scope = encodeURIComponent([
+        'openid',
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/youtube.readonly',
+        'https://www.googleapis.com/auth/youtube.download',
+      ].join(' '));
+      var state = crypto.randomUUID();
+      // Store state in KV for 10 minutes to prevent CSRF
+      await kv.put('oauth_state:' + state, '1', { expirationTtl: 600 });
+      var oauthUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
+        '?client_id=' + clientId +
+        '&redirect_uri=' + redirectUri +
+        '&response_type=code' +
+        '&scope=' + scope +
+        '&access_type=offline' +
+        '&prompt=consent' +
+        '&state=' + state;
+      return json({ url: oauthUrl });
+    }
+
+    // GET /api/auth/google/callback — handle OAuth callback
+    if (url.pathname === '/api/auth/google/callback' && method === 'GET') {
+      var code = url.searchParams.get('code');
+      var state = url.searchParams.get('state');
+      var errorParam = url.searchParams.get('error');
+      if (errorParam) {
+        return new Response('<script>window.location="/?error=' + encodeURIComponent(errorParam) + '"</script>', { headers: { 'Content-Type': 'text/html' } });
+      }
+      if (!code || !state) { return error('Missing code or state'); }
+      // Verify state
+      var storedState = await kv.get('oauth_state:' + state);
+      if (!storedState) { return error('Invalid or expired state'); }
+      await kv.delete('oauth_state:' + state);
+      try {
+        var clientId = env.GOOGLE_CLIENT_ID || 'GOOGLE_CLIENT_ID';
+        var clientSecret = env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET';
+        var redirectUri = url.origin + '/api/auth/google/callback';
+        // Exchange code for tokens
+        var tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'code=' + encodeURIComponent(code) +
+            '&client_id=' + encodeURIComponent(clientId) +
+            '&client_secret=' + encodeURIComponent(clientSecret) +
+            '&redirect_uri=' + encodeURIComponent(redirectUri) +
+            '&grant_type=authorization_code',
+        });
+        var tokens = await tokenRes.json();
+        if (!tokens.access_token) { return error('Failed to get access token: ' + JSON.stringify(tokens)); }
+        // Get user profile
+        var profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { 'Authorization': 'Bearer ' + tokens.access_token }
+        });
+        var profile = await profileRes.json();
+        var email = (profile.email || '').toLowerCase();
+        var name = profile.name || profile.given_name || email.split('@')[0];
+        if (!email) { return error('Google email not available'); }
+        // Find or create user
+        var emailRef = await getUser(kv, 'email:' + email);
+        var user;
+        if (emailRef) { user = await getUser(kv, emailRef.id); }
+        if (!user) {
+          var userId = crypto.randomUUID();
+          user = { id: userId, email: email, name: name, plan: 'free', creditsUsed: 0, creditPeriodStart: Date.now(), googleId: profile.id, createdAt: Date.now() };
+          await setUser(kv, userId, user);
+          await setUser(kv, 'email:' + email, { id: userId });
+        }
+        // Store YouTube OAuth tokens in KV (for downloading videos)
+        await kv.put('yt_tokens:' + user.id, JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_at: Date.now() + (tokens.expires_in * 1000),
+        }), { expirationTtl: 60 * 60 * 24 * 30 }); // 30 days
+        // Issue KlikClip JWT
+        var secret = env.JWT_SECRET || 'klikclip-dev-secret';
+        var payload = JSON.stringify({ sub: user.id, email: user.email, name: user.name, plan: user.plan || 'free', hasYoutube: true, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 });
+        var enc2 = new TextEncoder();
+        var header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+        var payB64 = btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        var key = await crypto.subtle.importKey('raw', enc2.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        var sig = await crypto.subtle.sign('HMAC', key, enc2.encode(header + '.' + payB64));
+        var sigB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        var jwtToken = header + '.' + payB64 + '.' + sigB64;
+        // Redirect to frontend with token
+        return new Response(
+          '<script>localStorage.setItem("kc_token","' + jwtToken + '");window.location="/";</script>',
+          { headers: { 'Content-Type': 'text/html' } }
+        );
+      } catch(e) { return error('Google OAuth failed: ' + e.message); }
+    }
+
+    // POST /api/auth/google (legacy — keep for backward compat)
     if (url.pathname === '/api/auth/google' && method === 'POST') {
       var body = await request.json();
       var credential = body.credential;
@@ -430,9 +526,7 @@ export default {
         if (!email) { return error('Google email not available'); }
         var emailRef = await getUser(kv, 'email:' + email);
         var user;
-        if (emailRef) {
-          user = await getUser(kv, emailRef.id);
-        }
+        if (emailRef) { user = await getUser(kv, emailRef.id); }
         if (!user) {
           var userId = crypto.randomUUID();
           user = { id: userId, email: email, name: name, plan: 'free', creditsUsed: 0, creditPeriodStart: Date.now(), googleId: gData.sub, createdAt: Date.now() };
@@ -492,7 +586,50 @@ export default {
 
     // ── FRONTEND API ENDPOINTS (v2 format) ──
 
-    // POST /api/analyze — analyze video, return clips (frontend calls this)
+    // GET /api/youtube/channels — get user's YouTube channel videos
+    if (url.pathname === '/api/youtube/channels' && method === 'GET') {
+      var ytTokensRaw = await kv.get('yt_tokens:' + userId);
+      if (!ytTokensRaw) { return json({ connected: false, videos: [] }); }
+      var ytTokens = JSON.parse(ytTokensRaw);
+      // Refresh token if expired
+      if (Date.now() > ytTokens.expires_at - 60000) {
+        var refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'refresh_token=' + encodeURIComponent(ytTokens.refresh_token) +
+            '&client_id=GOOGLE_CLIENT_ID' +
+            '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET') +
+            '&grant_type=refresh_token',
+        });
+        var refreshed = await refreshRes.json();
+        if (refreshed.access_token) {
+          ytTokens.access_token = refreshed.access_token;
+          ytTokens.expires_at = Date.now() + (refreshed.expires_in * 1000);
+          await kv.put('yt_tokens:' + userId, JSON.stringify(ytTokens), { expirationTtl: 60 * 60 * 24 * 30 });
+        }
+      }
+      // Get channel uploads
+      var chRes = await fetch('https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true', {
+        headers: { 'Authorization': 'Bearer ' + ytTokens.access_token }
+      });
+      var chData = await chRes.json();
+      if (!chData.items || !chData.items[0]) { return json({ connected: true, videos: [] }); }
+      var uploadsId = chData.items[0].contentDetails.relatedPlaylists.uploads;
+      var vidRes = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=20&playlistId=' + uploadsId, {
+        headers: { 'Authorization': 'Bearer ' + ytTokens.access_token }
+      });
+      var vidData = await vidRes.json();
+      var videos = (vidData.items || []).map(function(v) {
+        return {
+          id: v.snippet.resourceId.videoId,
+          title: v.snippet.title,
+          thumbnail: v.snippet.thumbnails && v.snippet.thumbnails.medium ? v.snippet.thumbnails.medium.url : '',
+          publishedAt: v.snippet.publishedAt,
+          url: 'https://www.youtube.com/watch?v=' + v.snippet.resourceId.videoId,
+        };
+      });
+      return json({ connected: true, videos: videos });
+    }
     if (url.pathname === '/api/analyze' && method === 'POST') {
       var body = await request.json();
       var videoUrl = body.url || body.videoUrl;
@@ -644,6 +781,31 @@ export default {
           var clipJob = clipJobId ? await getJobCached(kv, clipJobId) : null;
           var clipInfo = clipJob && clipJob.clips ? clipJob.clips.find(function(c) { return c.id === clipId; }) : null;
 
+          // Get YouTube OAuth tokens for this user
+          var ytTokensRaw2 = await kv.get('yt_tokens:' + userId);
+          var ytAccessToken = null;
+          if (ytTokensRaw2) {
+            var ytTok = JSON.parse(ytTokensRaw2);
+            // Refresh if needed
+            if (Date.now() > ytTok.expires_at - 60000 && ytTok.refresh_token) {
+              var rfRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'refresh_token=' + encodeURIComponent(ytTok.refresh_token) +
+                  '&client_id=GOOGLE_CLIENT_ID' +
+                  '&client_secret=' + encodeURIComponent(env.GOOGLE_CLIENT_SECRET || 'GOOGLE_CLIENT_SECRET') +
+                  '&grant_type=refresh_token',
+              });
+              var rfData = await rfRes.json();
+              if (rfData.access_token) {
+                ytTok.access_token = rfData.access_token;
+                ytTok.expires_at = Date.now() + (rfData.expires_in * 1000);
+                await kv.put('yt_tokens:' + userId, JSON.stringify(ytTok), { expirationTtl: 60 * 60 * 24 * 30 });
+              }
+            }
+            ytAccessToken = ytTok.access_token;
+          }
+
           var rRes = await fetch(renderUrl + '/api/clip/direct', {
             method: 'POST',
             headers: {
@@ -656,6 +818,7 @@ export default {
               youtubeUrl: clipJob ? clipJob.youtube_url : clipBody.youtubeUrl,
               startSec: clipInfo ? clipInfo.start_sec : clipBody.startSec,
               endSec: clipInfo ? clipInfo.end_sec : clipBody.endSec,
+              ytAccessToken: ytAccessToken,
             }),
           });
           if (rRes.ok) {

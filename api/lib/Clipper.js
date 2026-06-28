@@ -128,26 +128,30 @@ async function getVideoInfo(youtubeUrl) {
 }
 
 // ─── Download best quality (for FFmpeg processing) ────────────────────────────
-async function downloadVideo(youtubeUrl, videoId) {
+async function downloadVideo(youtubeUrl, videoId, ytAccessToken) {
   const outputPath = path.join(TMP_DIR, `${videoId}.%(ext)s`);
 
-  // Try multiple strategies to bypass bot detection
-  const strategies = [
-    // Strategy 1: cookies + android client
-    `--extractor-args "youtube:player_client=android" ${COOKIES_OPTS}`,
-    // Strategy 2: cookies + ios client  
-    `--extractor-args "youtube:player_client=ios" ${COOKIES_OPTS}`,
-    // Strategy 3: cookies only, default client
-    COOKIES_OPTS,
-    // Strategy 4: no cookies, mweb client
-    '--extractor-args "youtube:player_client=mweb"',
-  ].filter(s => s.trim());
+  // Build strategies — OAuth token first if available
+  const strategies = [];
+
+  if (ytAccessToken) {
+    // Best strategy: use OAuth token directly
+    strategies.push(`--add-header "Authorization:Bearer ${ytAccessToken}" --extractor-args "youtube:player_client=web"`);
+    strategies.push(`--add-header "Authorization:Bearer ${ytAccessToken}" --extractor-args "youtube:player_client=tv_embedded"`);
+  }
+
+  // Fallback strategies with cookies
+  if (fs.existsSync(COOKIES_PATH)) {
+    strategies.push(`--cookies "${COOKIES_PATH}" --extractor-args "youtube:player_client=web"`);
+  }
+  strategies.push('--extractor-args "youtube:player_client=mweb"');
+  strategies.push('--extractor-args "youtube:player_client=mediaconnect"');
 
   let lastError;
   for (const strategy of strategies) {
     try {
       const cmd = buildYtdlpCmd(youtubeUrl, outputPath, strategy);
-      console.log('[Clipper] Trying strategy:', strategy.slice(0, 60));
+      console.log('[Clipper] Trying strategy:', strategy.slice(0, 80));
       await execAsync(cmd, { timeout: 300000 });
 
       const mp4 = path.join(TMP_DIR, `${videoId}.mp4`);
@@ -156,7 +160,7 @@ async function downloadVideo(youtubeUrl, videoId) {
       const files = fs.readdirSync(TMP_DIR).filter(f => f.startsWith(videoId));
       if (files[0]) return path.join(TMP_DIR, files[0]);
     } catch (err) {
-      console.log('[Clipper] Strategy failed:', err.message.slice(0, 100));
+      console.log('[Clipper] Strategy failed:', err.message.slice(0, 120));
       lastError = err;
     }
   }

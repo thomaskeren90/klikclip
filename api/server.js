@@ -248,23 +248,20 @@ app.get('/api/job/:jobId', wrap(async (req, res) => {
 // ─── DIRECT CLIP (synchronous, no job store needed) ──────────────────────────
 // Called by Cloudflare Worker with full clip params — responds with download_url when done
 app.post('/api/clip/direct', requireAuth, wrap(async (req, res) => {
-  const { clipId, youtubeUrl, startSec, endSec, caption = '', cropMode = 'center', addCaptions = false } = req.body;
+  const { clipId, youtubeUrl, startSec, endSec, caption = '', cropMode = 'center', addCaptions = false, ytAccessToken } = req.body;
   if (!clipId || !youtubeUrl || startSec === undefined || endSec === undefined) {
     return res.status(400).json({ error: 'clipId, youtubeUrl, startSec, endSec required' });
   }
 
   try {
-    // Download video
     const tmpId = clipId + '-' + Date.now();
-    const sourcePath = await downloadVideo(youtubeUrl, tmpId);
+    const sourcePath = await downloadVideo(youtubeUrl, tmpId, ytAccessToken);
 
-    // Cut clip
     const result = await processClip({
       sourcePath, startSec: Number(startSec), endSec: Number(endSec),
       clipId, caption, cropMode, addCaptions,
     });
 
-    // Cleanup tmp download
     try { fs.unlinkSync(sourcePath); } catch {}
 
     const downloadUrl = `${BASE_URL}/clips/${clipId}.mp4`;

@@ -16,3 +16,4 @@ binding = "ASSETS"
 # Non-secret env vars
 [vars]
 RENDER_BASE_URL = "https://klikclip.onrender.com"
+GOOGLE_CLIENT_ID = "534974139526-7gl4mdr2dnmkpfdji2lou9h7ibt9c4m3.apps.googleusercontent.com"
